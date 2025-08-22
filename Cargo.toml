@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 wg_internal = { git = "https://github.com/WGL-2024/WGL_repo_2024.git", features = ["debug"] }
 common = { path = "../common" }
+client = { path = "../client"}
+server = { path = "../server"}
 
 null-pointer-drone = { git = "https://github.com/The-Null-Pointer-Patrol/null-pointer-drone.git", branch = "main" }
 wg_2024-rust = { git = "https://github.com/LuigiMiazzo17/unitn-advancedProgramming-WGL_2024-drone.git"}
