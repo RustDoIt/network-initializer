@@ -4,10 +4,11 @@
 use crate::parser::{Parse, Validate};
 use crate::utils::{generate_drones, Channel};
 use client::chat_client::ChatClient;
+use client::web_browser::WebBrowser;
 use common::network::Network;
-use common::types::{NodeCommand, NodeEvent};
 use common::Processor;
 use crossbeam::channel::{Receiver, Sender};
+use server::{ChatServer, MediaServer, TextServer};
 use std::any::Any;
 use std::collections::HashMap;
 use std::thread::JoinHandle;
@@ -15,8 +16,7 @@ use wg_internal::config::Config;
 use wg_internal::controller::{DroneCommand, DroneEvent};
 use wg_internal::drone::Drone;
 use wg_internal::network::NodeId;
-use wg_internal::packet::Packet;
-use client::web_browser::WebBrowser;
+use wg_internal::packet::{NodeType, Packet};
 
 pub struct Uninitialized;
 pub struct Initialized;
@@ -79,7 +79,6 @@ impl NetworkInitializer<Uninitialized> {
     }
 
     fn initialize_drones(&mut self) {
-
         let mut drones_attributes = Vec::new();
         // first create all channelsWW
         for d in self.config.drone.iter() {
@@ -96,40 +95,57 @@ impl NetworkInitializer<Uninitialized> {
                 }
             }
             // initializing receiver channel of the drone
-            if let Some(packet_receiver) = self.communications_channels.get(&d.id){
-                drones_attributes.push((d.id, command_channel.get_receiver(), packet_receiver.get_receiver(), neighbours, d.pdr));
+            if let Some(packet_receiver) = self.communications_channels.get(&d.id) {
+                drones_attributes.push((
+                    d.id,
+                    command_channel.get_receiver(),
+                    packet_receiver.get_receiver(),
+                    neighbours,
+                    d.pdr,
+                ));
             }
-            
         }
 
-        self.initialized_drones = generate_drones(self.drone_event_channel.get_sender(), drones_attributes);
+        self.initialized_drones =
+            generate_drones(self.drone_event_channel.get_sender(), drones_attributes);
     }
 
     fn initialize_clients(&mut self) {
-        for (idx,c) in self.config.client.iter().enumerate(){
-
+        for (idx, c) in self.config.client.iter().enumerate() {
             // create neighbors
             let mut neighbors = HashMap::new();
-            c.connected_drone_ids.iter().for_each(|id|{
-                if let Some(channel) = self.communications_channels.get(id){
+            c.connected_drone_ids.iter().for_each(|id| {
+                if let Some(channel) = self.communications_channels.get(id) {
                     neighbors.insert(*id, channel.get_sender());
-                }   
-
+                }
             });
             //create the channels
             let packet_channel = Channel::new();
             let command_channel = Channel::new();
             let client: Box<dyn Processor>;
             // instantiate client
-            if idx == 0{
-                client = Box::new(WebBrowser::new(c.id, neighbors,packet_channel.get_receiver() , command_channel.get_receiver(), self.node_event_channel.get_sender()));
-            }else{
-                client = Box::new(ChatClient::new(c.id, neighbors,packet_channel.get_receiver() , command_channel.get_receiver(),self.node_event_channel.get_sender()));
+            if idx == 0 {
+                client = Box::new(WebBrowser::new(
+                    c.id,
+                    neighbors,
+                    packet_channel.get_receiver(),
+                    command_channel.get_receiver(),
+                    self.node_event_channel.get_sender(),
+                ));
+            } else {
+                client = Box::new(ChatClient::new(
+                    c.id,
+                    neighbors,
+                    packet_channel.get_receiver(),
+                    command_channel.get_receiver(),
+                    self.node_event_channel.get_sender(),
+                ));
             }
-            
+
             // save the channels
             self.communications_channels.insert(c.id, packet_channel);
-            self.node_command_channels.insert(c.id,command_channel.get_sender());
+            self.node_command_channels
+                .insert(c.id, command_channel.get_sender());
 
             // save the client
             self.initialized_clients.push(client);
@@ -137,17 +153,84 @@ impl NetworkInitializer<Uninitialized> {
     }
 
     fn initialize_servers(&mut self) {
-        unimplemented!()
-        // for (idx,s) in self.config.server.iter().enumerate(){
-            
+        for (i, s) in self.config.server.iter().enumerate() {
+            let server: Box<dyn Processor>;
+            let packet_channel = Channel::new();
+            let mut neighbors = HashMap::new();
+            s.connected_drone_ids.iter().for_each(|id| {
+                if let Some(channel) = self.communications_channels.get(id) {
+                    neighbors.insert(*id, channel.get_sender());
+                }
+            });
+            let command_channel = Channel::new();
+            self.node_command_channels
+                .insert(s.id, command_channel.get_sender());
+            match i % 3 {
+                0 => {
+                    server = Box::new(TextServer::new(
+                        s.id,
+                        neighbors.clone(),
+                        packet_channel.get_receiver(),
+                        command_channel.get_receiver(),
+                        self.node_event_channel.get_sender(),
+                    ));
+                }
+                1 => {
+                    server = Box::new(MediaServer::new(
+                        s.id,
+                        neighbors.clone(),
+                        packet_channel.get_receiver(),
+                        command_channel.get_receiver(),
+                        self.node_event_channel.get_sender(),
+                    ));
+                }
+                2 => {
+                    server = Box::new(ChatServer::new(
+                        s.id,
+                        neighbors.clone(),
+                        packet_channel.get_receiver(),
+                        command_channel.get_receiver(),
+                        self.node_event_channel.get_sender(),
+                    ));
+                }
+                _ => unreachable!(),
+            }
+            self.communications_channels.insert(s.id, packet_channel);
+            self.initialized_servers.push(server);
+        }
+    }
 
-        // }
+
+    fn inizialize_network_view(&mut self) {
+        let mut network = Network::default();
+        for ((d, c), s) in self.config.drone.iter()
+            .zip(self.config.client.iter())
+            .zip(self.config.server.iter())
+        {
+            network.add_node_controller_view(d.id, NodeType::Drone, &d.connected_node_ids);
+            network.add_node_controller_view(c.id, NodeType::Client, &c.connected_drone_ids);
+            network.add_node_controller_view(s.id, NodeType::Server, &s.connected_drone_ids);
+
+        }
     }
 }
 
 impl NetworkInitializer<Initialized> {
     fn new(initializer: NetworkInitializer<Uninitialized>) -> Self {
-        unimplemented!()
+        Self {
+            communications_channels: initializer.communications_channels,
+            drone_command_channels: initializer.drone_command_channels,
+            node_command_channels: initializer.node_command_channels,
+            drone_event_channel: initializer.drone_event_channel,
+            node_event_channel: initializer.node_event_channel,
+            config: initializer.config,
+            state: std::marker::PhantomData,
+            network_view: None,
+            initialized_clients: initializer.initialized_clients,
+            initialized_servers: initializer.initialized_servers,
+            initialized_drones: initializer.initialized_drones,
+            node_handles: HashMap::new(),
+        }
     }
 
     pub fn start_simulation(&mut self) -> NetworkInitializer<Running> {
@@ -157,7 +240,20 @@ impl NetworkInitializer<Initialized> {
 
 impl NetworkInitializer<Running> {
     fn new(initializer: NetworkInitializer<Initialized>) -> Self {
-        unimplemented!()
+        Self {
+            communications_channels: initializer.communications_channels,
+            drone_command_channels: initializer.drone_command_channels,
+            node_command_channels: initializer.node_command_channels,
+            drone_event_channel: initializer.drone_event_channel,
+            node_event_channel: initializer.node_event_channel,
+            config: initializer.config,
+            state: std::marker::PhantomData,
+            network_view: initializer.network_view,
+            initialized_clients: initializer.initialized_clients,
+            initialized_servers: initializer.initialized_servers,
+            initialized_drones: initializer.initialized_drones,
+            node_handles: initializer.node_handles,
+        }
     }
 
     pub fn stop_simulation(&self) {
@@ -165,18 +261,40 @@ impl NetworkInitializer<Running> {
     }
 
     pub fn get_drones(&self) -> HashMap<NodeId, (Sender<DroneCommand>, Receiver<DroneEvent>)> {
-        unimplemented!()
+        let mut map= HashMap::new();
+        for d in self.config.client.iter() {
+            if let Some(channel) = self.drone_command_channels.get(&d.id){
+                map.insert(d.id, (channel.clone(), self.drone_event_channel.get_receiver()));
+            }
+        }
+        map
     }
 
-    pub fn get_clients(&self) -> HashMap<NodeId, (Sender<NodeCommand>, Receiver<NodeEvent>)> {
-        unimplemented!()
+    pub fn get_clients(&self) -> HashMap<NodeId, (Sender<Box<dyn Any>>, Receiver<Box<dyn Any>>)> {
+        let mut map= HashMap::new();
+        for c in self.config.client.iter() {
+            if let Some(channel) = self.node_command_channels.get(&c.id){
+                map.insert(c.id, (channel.clone(), self.node_event_channel.get_receiver()));
+            }
+        }
+        map
     }
 
-    pub fn get_servers(&self) -> HashMap<NodeId, (Sender<NodeCommand>, Receiver<NodeEvent>)> {
-        unimplemented!()
+    pub fn get_servers(&self) -> HashMap<NodeId, (Sender<Box<dyn Any>>, Receiver<Box<dyn Any>>)> {
+        let mut map= HashMap::new();
+        for s in self.config.server.iter() {
+            if let Some(channel) = self.node_command_channels.get(&s.id){
+                map.insert(s.id, (channel.clone(), self.node_event_channel.get_receiver()));
+            }
+        }
+        map
     }
 
     fn get_network_view(&self) -> Network {
-        unimplemented!()
+        if let Some(view) = &self.network_view {
+            view.clone()
+        } else {
+            panic!("Network view is not initialized");
+        }
     }
 }
