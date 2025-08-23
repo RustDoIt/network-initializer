@@ -1004,11 +1004,7 @@ dependencies = [
  "rusty_drones",
  "serde",
  "server",
-<<<<<<< HEAD
- "toml 0.9.2",
-=======
  "toml 0.9.5",
->>>>>>> 4f95d81d60d85b25ea57967183c58eb174ccc858
  "wg_2024-rust",
  "wg_internal",
 ]
@@ -1454,10 +1450,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
-<<<<<<< HEAD
  "tokio",
-=======
->>>>>>> 4f95d81d60d85b25ea57967183c58eb174ccc858
  "uuid",
  "wg_internal",
 ]
