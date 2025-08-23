@@ -6,10 +6,10 @@ use crate::utils::{generate_drones, Channel};
 use client::chat_client::ChatClient;
 use client::web_browser::WebBrowser;
 use common::network::Network;
+use common::types::{Command, Event};
 use common::Processor;
 use crossbeam::channel::{Receiver, Sender};
 use server::{ChatServer, MediaServer, TextServer};
-use std::any::Any;
 use std::collections::HashMap;
 use std::thread::JoinHandle;
 use wg_internal::config::Config;
@@ -28,11 +28,12 @@ pub struct NetworkInitializer<State = Uninitialized> {
     // each drone has his command receiver, controller needs senders to send commands
     drone_command_channels: HashMap<NodeId, Sender<DroneCommand>>,
     // each node has his command receiver, controller needs senders to send commands
-    node_command_channels: HashMap<NodeId, Sender<Box<dyn Any>>>,
+    node_command_channels: HashMap<NodeId, Sender<Box<dyn Command>>>,
     // controller receives events from drones
     drone_event_channel: Channel<DroneEvent>,
     // controller receives events from nodes
-    node_event_channel: Channel<Box<dyn Any>>,
+    node_event_channel: Channel<Box<dyn Event>>,
+    total_nodes: usize,
     config: Config,
     // do not exists
     state: std::marker::PhantomData<State>,
@@ -40,12 +41,13 @@ pub struct NetworkInitializer<State = Uninitialized> {
     network_view: Option<Network>,
 
     // these are needed to NetworkInitializer<Running> to run each node
-    initialized_clients: Vec<Box<dyn Processor>>,
-    initialized_servers: Vec<Box<dyn Processor>>,
+    initialized_clients: Vec<Box<dyn Processor + Send>>,
+    initialized_servers: Vec<Box<dyn Processor + Send>>,
     initialized_drones: Vec<Box<dyn Drone>>,
 
     // to keep track of threads and join them at the end
-    node_handles: HashMap<NodeId, JoinHandle<()>>,
+    node_handles: Vec<JoinHandle<()>>,
+
 }
 
 impl NetworkInitializer<Uninitialized> {
@@ -60,6 +62,9 @@ impl NetworkInitializer<Uninitialized> {
             node_command_channels: HashMap::new(),
             drone_event_channel: Channel::new(),
             node_event_channel: Channel::new(),
+            total_nodes: config.drone.len()
+                + config.client.len()
+                + config.server.len(),
             config,
             // do not exists
             state: std::marker::PhantomData,
@@ -67,7 +72,7 @@ impl NetworkInitializer<Uninitialized> {
             initialized_clients: Vec::new(),
             initialized_servers: Vec::new(),
             initialized_drones: Vec::new(),
-            node_handles: HashMap::new(),
+            node_handles: Vec::new(),
         }
     }
 
@@ -75,6 +80,7 @@ impl NetworkInitializer<Uninitialized> {
         self.initialize_drones();
         self.initialize_clients();
         self.initialize_servers();
+        self.inizialize_network_view();
         NetworkInitializer::<Initialized>::new(self)
     }
 
@@ -210,8 +216,8 @@ impl NetworkInitializer<Uninitialized> {
             network.add_node_controller_view(d.id, NodeType::Drone, &d.connected_node_ids);
             network.add_node_controller_view(c.id, NodeType::Client, &c.connected_drone_ids);
             network.add_node_controller_view(s.id, NodeType::Server, &s.connected_drone_ids);
-
         }
+        self.network_view = Some(network);
     }
 }
 
@@ -223,29 +229,55 @@ impl NetworkInitializer<Initialized> {
             node_command_channels: initializer.node_command_channels,
             drone_event_channel: initializer.drone_event_channel,
             node_event_channel: initializer.node_event_channel,
+            total_nodes: initializer.total_nodes,
             config: initializer.config,
             state: std::marker::PhantomData,
             network_view: None,
             initialized_clients: initializer.initialized_clients,
             initialized_servers: initializer.initialized_servers,
             initialized_drones: initializer.initialized_drones,
-            node_handles: HashMap::new(),
+            node_handles: Vec::new(),
         }
     }
 
-    pub fn start_simulation(&mut self) -> NetworkInitializer<Running> {
-        unimplemented!()
+    pub fn start_simulation(mut self) -> NetworkInitializer<Running> {
+        for mut drone in self.initialized_drones.drain(..) {
+            let handle = std::thread::spawn(move || {
+                drone.run();
+            });
+            self.node_handles.push(handle);
+        }
+        for mut client in self.initialized_clients.drain(..) {
+            let handle = std::thread::spawn(move || {
+                client.run();
+            });
+            self.node_handles.push(handle);
+        }
+        for mut server in self.initialized_servers.drain(..) {
+            let handle = std::thread::spawn(move || {
+                server.run();
+            });
+            self.node_handles.push(handle);
+        }
+        NetworkInitializer::<Running>::new(self)
+
     }
 }
 
 impl NetworkInitializer<Running> {
     fn new(initializer: NetworkInitializer<Initialized>) -> Self {
+        assert!(initializer.initialized_drones.is_empty(), "Drones should have been moved");
+        assert!(initializer.initialized_clients.is_empty(), "Clients should have been moved");
+        assert!(initializer.initialized_servers.is_empty(), "Servers should have been moved");
+        assert!(initializer.node_handles.len() == initializer.total_nodes, "All nodes should have been started");
+
         Self {
             communications_channels: initializer.communications_channels,
             drone_command_channels: initializer.drone_command_channels,
             node_command_channels: initializer.node_command_channels,
             drone_event_channel: initializer.drone_event_channel,
             node_event_channel: initializer.node_event_channel,
+            total_nodes: initializer.total_nodes,
             config: initializer.config,
             state: std::marker::PhantomData,
             network_view: initializer.network_view,
@@ -256,8 +288,10 @@ impl NetworkInitializer<Running> {
         }
     }
 
-    pub fn stop_simulation(&self) {
-        unimplemented!()
+    pub fn stop_simulation(&mut self) {
+        for handle in self.node_handles.drain(..) {
+            handle.join().expect("Failed to join node thread");
+        }
     }
 
     pub fn get_drones(&self) -> HashMap<NodeId, (Sender<DroneCommand>, Receiver<DroneEvent>)> {
@@ -270,7 +304,7 @@ impl NetworkInitializer<Running> {
         map
     }
 
-    pub fn get_clients(&self) -> HashMap<NodeId, (Sender<Box<dyn Any>>, Receiver<Box<dyn Any>>)> {
+    pub fn get_clients(&self) -> HashMap<NodeId, (Sender<Box<dyn Command>>, Receiver<Box<dyn Event>>)> {
         let mut map= HashMap::new();
         for c in self.config.client.iter() {
             if let Some(channel) = self.node_command_channels.get(&c.id){
@@ -280,7 +314,7 @@ impl NetworkInitializer<Running> {
         map
     }
 
-    pub fn get_servers(&self) -> HashMap<NodeId, (Sender<Box<dyn Any>>, Receiver<Box<dyn Any>>)> {
+    pub fn get_servers(&self) -> HashMap<NodeId, (Sender<Box<dyn Command>>, Receiver<Box<dyn Event>>)> {
         let mut map= HashMap::new();
         for s in self.config.server.iter() {
             if let Some(channel) = self.node_command_channels.get(&s.id){
@@ -291,10 +325,6 @@ impl NetworkInitializer<Running> {
     }
 
     fn get_network_view(&self) -> Network {
-        if let Some(view) = &self.network_view {
-            view.clone()
-        } else {
-            panic!("Network view is not initialized");
-        }
+        self.network_view.clone().expect("Network not Initialized")
     }
 }
