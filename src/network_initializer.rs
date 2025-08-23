@@ -47,24 +47,19 @@ pub struct NetworkInitializer<State = Uninitialized> {
 
     // to keep track of threads and join them at the end
     node_handles: Vec<JoinHandle<()>>,
-
 }
 
 impl NetworkInitializer<Uninitialized> {
     pub fn new(config_path: &str) -> Self {
         let config = Config::parse_config(config_path).expect("Failed to parse config");
-        if let Err(e) = config.validate_config() {
-            panic!("Configuration validation failed: {}", e);
-        }
+        config.validate_config().expect("Failed to validate config");
         Self {
             communications_channels: HashMap::new(),
             drone_command_channels: HashMap::new(),
             node_command_channels: HashMap::new(),
             drone_event_channel: Channel::new(),
             node_event_channel: Channel::new(),
-            total_nodes: config.drone.len()
-                + config.client.len()
-                + config.server.len(),
+            total_nodes: config.drone.len() + config.client.len() + config.server.len(),
             config,
             // do not exists
             state: std::marker::PhantomData,
@@ -87,12 +82,12 @@ impl NetworkInitializer<Uninitialized> {
     fn initialize_drones(&mut self) {
         let mut drones_attributes = Vec::new();
         // first create all channelsWW
-        for d in self.config.drone.iter() {
+        for d in &self.config.drone {
             self.communications_channels.insert(d.id, Channel::new());
         }
 
         // then this
-        for d in self.config.drone.iter() {
+        for d in &self.config.drone {
             let command_channel = Channel::new();
             let mut neighbours = HashMap::new();
             for id in d.connected_node_ids.iter() {
@@ -206,10 +201,12 @@ impl NetworkInitializer<Uninitialized> {
         }
     }
 
-
     fn inizialize_network_view(&mut self) {
         let mut network = Network::default();
-        for ((d, c), s) in self.config.drone.iter()
+        for ((d, c), s) in self
+            .config
+            .drone
+            .iter()
             .zip(self.config.client.iter())
             .zip(self.config.server.iter())
         {
@@ -248,9 +245,7 @@ impl NetworkInitializer<Initialized> {
             self.node_handles.push(handle);
         }
         for mut client in self.initialized_clients.drain(..) {
-            let handle = std::thread::spawn(move || {
-                client.run();
-            });
+            let handle = std::thread::spawn(move || client.run());
             self.node_handles.push(handle);
         }
         for mut server in self.initialized_servers.drain(..) {
@@ -260,16 +255,27 @@ impl NetworkInitializer<Initialized> {
             self.node_handles.push(handle);
         }
         NetworkInitializer::<Running>::new(self)
-
     }
 }
 
 impl NetworkInitializer<Running> {
     fn new(initializer: NetworkInitializer<Initialized>) -> Self {
-        assert!(initializer.initialized_drones.is_empty(), "Drones should have been moved");
-        assert!(initializer.initialized_clients.is_empty(), "Clients should have been moved");
-        assert!(initializer.initialized_servers.is_empty(), "Servers should have been moved");
-        assert!(initializer.node_handles.len() == initializer.total_nodes, "All nodes should have been started");
+        assert!(
+            initializer.initialized_drones.is_empty(),
+            "Drones should have been moved"
+        );
+        assert!(
+            initializer.initialized_clients.is_empty(),
+            "Clients should have been moved"
+        );
+        assert!(
+            initializer.initialized_servers.is_empty(),
+            "Servers should have been moved"
+        );
+        assert!(
+            initializer.node_handles.len() == initializer.total_nodes,
+            "All nodes should have been started"
+        );
 
         Self {
             communications_channels: initializer.communications_channels,
@@ -295,30 +301,43 @@ impl NetworkInitializer<Running> {
     }
 
     pub fn get_drones(&self) -> HashMap<NodeId, (Sender<DroneCommand>, Receiver<DroneEvent>)> {
-        let mut map= HashMap::new();
+        let mut map = HashMap::new();
         for d in self.config.client.iter() {
-            if let Some(channel) = self.drone_command_channels.get(&d.id){
-                map.insert(d.id, (channel.clone(), self.drone_event_channel.get_receiver()));
+            if let Some(channel) = self.drone_command_channels.get(&d.id) {
+                map.insert(
+                    d.id,
+                    (channel.clone(), self.drone_event_channel.get_receiver()),
+                );
             }
         }
         map
     }
 
-    pub fn get_clients(&self) -> HashMap<NodeId, (Sender<Box<dyn Command>>, Receiver<Box<dyn Event>>)> {
-        let mut map= HashMap::new();
+    pub fn get_clients(
+        &self,
+    ) -> HashMap<NodeId, (Sender<Box<dyn Command>>, Receiver<Box<dyn Event>>)> {
+        let mut map = HashMap::new();
         for c in self.config.client.iter() {
-            if let Some(channel) = self.node_command_channels.get(&c.id){
-                map.insert(c.id, (channel.clone(), self.node_event_channel.get_receiver()));
+            if let Some(channel) = self.node_command_channels.get(&c.id) {
+                map.insert(
+                    c.id,
+                    (channel.clone(), self.node_event_channel.get_receiver()),
+                );
             }
         }
         map
     }
 
-    pub fn get_servers(&self) -> HashMap<NodeId, (Sender<Box<dyn Command>>, Receiver<Box<dyn Event>>)> {
-        let mut map= HashMap::new();
+    pub fn get_servers(
+        &self,
+    ) -> HashMap<NodeId, (Sender<Box<dyn Command>>, Receiver<Box<dyn Event>>)> {
+        let mut map = HashMap::new();
         for s in self.config.server.iter() {
-            if let Some(channel) = self.node_command_channels.get(&s.id){
-                map.insert(s.id, (channel.clone(), self.node_event_channel.get_receiver()));
+            if let Some(channel) = self.node_command_channels.get(&s.id) {
+                map.insert(
+                    s.id,
+                    (channel.clone(), self.node_event_channel.get_receiver()),
+                );
             }
         }
         map
@@ -326,5 +345,49 @@ impl NetworkInitializer<Running> {
 
     fn get_network_view(&self) -> Network {
         self.network_view.clone().expect("Network not Initialized")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // tests/network_initializer_tests.rs
+
+    use crate::network_initializer::Uninitialized;
+    use common::types::NodeCommand;
+
+    use super::NetworkInitializer;
+
+    #[test]
+    fn test_getters_after_running() {
+        let config_path = "./config/butterfly.toml";
+        let mut running = NetworkInitializer::<Uninitialized>::new(config_path)
+            .initialize()
+            .start_simulation();
+
+        // Check clients, servers, drones maps
+        let drones = running.get_drones();
+        let clients = running.get_clients();
+        let servers = running.get_servers();
+
+        assert!(!clients.is_empty(), "Clients should not be empty");
+        assert!(!servers.is_empty(), "Servers should not be empty");
+
+        // Drones may be optional depending on config
+        // but if present, check channels are usable
+        for (_, (tx, rx)) in drones {
+            assert!(tx.send(wg_internal::controller::DroneCommand::Crash).is_ok());
+            // we can't fully check rx without running simulation events
+        }
+
+        for (_, (tx, rx)) in clients {
+            assert!(tx.send(Box::new(NodeCommand::Shutdown)).is_ok());
+            // we can't fully check rx without running simulation events
+        }
+
+        for (_, (tx, rx)) in servers {
+            assert!(tx.send(Box::new(NodeCommand::Shutdown)).is_ok());
+            // we can't fully check rx without running simulation events
+        }
+        running.stop_simulation();
     }
 }

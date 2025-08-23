@@ -21,7 +21,13 @@ use wg_internal::drone::Drone as DroneTrait;
 use wg_internal::network::NodeId;
 use wg_internal::packet::Packet;
 
-
+type DroneAttributes = (
+    NodeId,                          // id
+    Receiver<DroneCommand>,          // controller_recv
+    Receiver<Packet>,                // packet_recv
+    HashMap<NodeId, Sender<Packet>>, // neighbors
+    f32,
+);
 pub enum NodeType<'a> {
     Drone(&'a Drone),
     Client(&'a Client),
@@ -59,6 +65,7 @@ macro_rules! drone_factories {
                     packet_send: HashMap<NodeId, Sender<Packet>>,
                     pdr: f32,
                 ) -> Box<dyn DroneTrait> {
+                    dbg!("Created drone type: {}", std::any::type_name::<$variant>());
                     Box::new($variant::new(id, controller_send, controller_recv, packet_recv, packet_send, pdr))
                 }
             )*
@@ -93,25 +100,27 @@ drone_factories!(
     RustDrone,
 );
 
-
 pub(crate) fn generate_drones(
     controller_send: Sender<DroneEvent>,
-    controller_receivers: Vec<(
-        NodeId, // id
-        Receiver<DroneCommand>, // controller_recv
-        Receiver<Packet>, // packet_recv
-        HashMap<NodeId, Sender<Packet>>, // neighbors
-        f32,
-    )>,
+    controller_receivers: Vec<DroneAttributes>,
 ) -> Vec<Box<dyn DroneTrait>> {
     controller_receivers
         .into_iter()
         .enumerate()
-        .map(|(i, (id, controller_recv, packet_recv, packet_send, pdr))| {
-            // pick the factory in round-robin using FACTORIES length
-            let factory = FACTORIES[i % FACTORIES.len()];
-            factory(id, controller_send.clone(), controller_recv, packet_recv, packet_send, pdr)
-        })
+        .map(
+            |(i, (id, controller_recv, packet_recv, packet_send, pdr))| {
+                // pick the factory in round-robin using FACTORIES length
+                let factory = FACTORIES[i % FACTORIES.len()];
+                factory(
+                    id,
+                    controller_send.clone(),
+                    controller_recv,
+                    packet_recv,
+                    packet_send,
+                    pdr,
+                )
+            },
+        )
         .collect()
 }
 
@@ -161,7 +170,15 @@ mod tests {
 
         // Create 25 inputs to force cycling through FACTORIES several times
         let inputs = (0..25)
-            .map(|id| (id, recv_cmd.clone(), recv_pkt.clone(), packet_map.clone(), 0.9))
+            .map(|id| {
+                (
+                    id,
+                    recv_cmd.clone(),
+                    recv_pkt.clone(),
+                    packet_map.clone(),
+                    0.9,
+                )
+            })
             .collect::<Vec<_>>();
 
         let drones = generate_drones(send_event, inputs);
@@ -179,4 +196,3 @@ mod tests {
         }
     }
 }
-
