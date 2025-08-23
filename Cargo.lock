@@ -100,6 +100,15 @@ checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
 
 [[package]]
 name = "bincode"
+version = "1.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "bincode"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ad1fa75f77bbd06f187540aa1d70ca50b80b27ce85e7f41c0ce7ff42b34ed3b"
@@ -181,6 +190,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "common 0.1.0",
+ "crossbeam",
+ "crossbeam-channel",
+ "log",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+ "wg_internal",
+]
+
+[[package]]
 name = "colored"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -208,7 +233,7 @@ name = "common"
 version = "0.1.0"
 source = "git+https://github.com/Cpp-enjoyers/common.git#18ac83d8245b9c14d467a50eea9d1332f4fe6821"
 dependencies = [
- "bincode",
+ "bincode 2.0.0",
  "crossbeam-channel",
  "log",
  "rand 0.8.5",
@@ -964,6 +989,7 @@ name = "network-initializer"
 version = "0.1.0"
 dependencies = [
  "ap2024_unitn_cppenjoyers_drone",
+ "client",
  "common 0.1.0",
  "crossbeam",
  "d-r-o-n-e_drone",
@@ -977,6 +1003,7 @@ dependencies = [
  "rusteze_drone",
  "rusty_drones",
  "serde",
+ "server",
  "toml 0.9.2",
  "wg_2024-rust",
  "wg_internal",
@@ -1373,9 +1400,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.140"
+version = "1.0.143"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20068b6e96dc6c9bd23e01df8827e6c7e1f2fddd43c21810382803c136b99373"
+checksum = "d401abef1d108fbd9cbaebc3e46611f4b1021f714a0597a71f41ee463f5f4a5a"
 dependencies = [
  "itoa",
  "memchr",
@@ -1411,6 +1438,21 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "server"
+version = "0.1.0"
+dependencies = [
+ "bincode 1.3.3",
+ "common 0.1.0",
+ "crossbeam",
+ "log",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+ "wg_internal",
 ]
 
 [[package]]
