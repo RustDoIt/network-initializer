@@ -2,12 +2,12 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 use crate::parser::{Parse, Validate};
-use crate::utils::{generate_drones, Channel};
+use crate::utils::{Channel, generate_drones};
 use client::chat_client::ChatClient;
 use client::web_browser::WebBrowser;
+use common::Processor;
 use common::network::Network;
 use common::types::{Command, Event};
-use common::Processor;
 use crossbeam::channel::{Receiver, Sender};
 use server::{ChatServer, MediaServer, TextServer};
 use std::collections::HashMap;
@@ -17,6 +17,8 @@ use wg_internal::controller::{DroneCommand, DroneEvent};
 use wg_internal::drone::Drone;
 use wg_internal::network::NodeId;
 use wg_internal::packet::{NodeType, Packet};
+
+type CommChannels = (Sender<Box<dyn Command>>, Receiver<Box<dyn Event>>);
 
 pub struct Uninitialized;
 pub struct Initialized;
@@ -50,6 +52,9 @@ pub struct NetworkInitializer<State = Uninitialized> {
 }
 
 impl NetworkInitializer<Uninitialized> {
+    /// # Panics
+    /// Panics it cannot parse the config or the config is not a valid config
+    #[must_use]
     pub fn new(config_path: &str) -> Self {
         let config = Config::parse_config(config_path).expect("Failed to parse config");
         config.validate_config().expect("Failed to validate config");
@@ -71,6 +76,7 @@ impl NetworkInitializer<Uninitialized> {
         }
     }
 
+    #[must_use]
     pub fn initialize(mut self) -> NetworkInitializer<Initialized> {
         self.initialize_drones();
         self.initialize_clients();
@@ -90,7 +96,7 @@ impl NetworkInitializer<Uninitialized> {
         for d in &self.config.drone {
             let command_channel = Channel::new();
             let mut neighbours = HashMap::new();
-            for id in d.connected_node_ids.iter() {
+            for id in &d.connected_node_ids {
                 if let Some(channel) = self.communications_channels.get(id) {
                     neighbours.insert(*id, channel.get_sender());
                 }
@@ -108,7 +114,7 @@ impl NetworkInitializer<Uninitialized> {
         }
 
         self.initialized_drones =
-            generate_drones(self.drone_event_channel.get_sender(), drones_attributes);
+            generate_drones(&self.drone_event_channel.sender, drones_attributes);
     }
 
     fn initialize_clients(&mut self) {
@@ -123,6 +129,7 @@ impl NetworkInitializer<Uninitialized> {
             //create the channels
             let packet_channel = Channel::new();
             let command_channel = Channel::new();
+            #[allow(clippy::needless_late_init)]
             let client: Box<dyn Processor>;
             // instantiate client
             if idx == 0 {
@@ -237,6 +244,7 @@ impl NetworkInitializer<Initialized> {
         }
     }
 
+    #[must_use]
     pub fn start_simulation(mut self) -> NetworkInitializer<Running> {
         for mut drone in self.initialized_drones.drain(..) {
             let handle = std::thread::spawn(move || {
@@ -294,15 +302,18 @@ impl NetworkInitializer<Running> {
         }
     }
 
+    /// # Panics
+    /// Panics if it cannot join handle
     pub fn stop_simulation(&mut self) {
         for handle in self.node_handles.drain(..) {
             handle.join().expect("Failed to join node thread");
         }
     }
 
+    #[must_use]
     pub fn get_drones(&self) -> HashMap<NodeId, (Sender<DroneCommand>, Receiver<DroneEvent>)> {
         let mut map = HashMap::new();
-        for d in self.config.client.iter() {
+        for d in &self.config.client {
             if let Some(channel) = self.drone_command_channels.get(&d.id) {
                 map.insert(
                     d.id,
@@ -313,11 +324,10 @@ impl NetworkInitializer<Running> {
         map
     }
 
-    pub fn get_clients(
-        &self,
-    ) -> HashMap<NodeId, (Sender<Box<dyn Command>>, Receiver<Box<dyn Event>>)> {
+    #[must_use]
+    pub fn get_clients(&self) -> HashMap<NodeId, CommChannels> {
         let mut map = HashMap::new();
-        for c in self.config.client.iter() {
+        for c in &self.config.client {
             if let Some(channel) = self.node_command_channels.get(&c.id) {
                 map.insert(
                     c.id,
@@ -328,11 +338,10 @@ impl NetworkInitializer<Running> {
         map
     }
 
-    pub fn get_servers(
-        &self,
-    ) -> HashMap<NodeId, (Sender<Box<dyn Command>>, Receiver<Box<dyn Event>>)> {
+    #[must_use]
+    pub fn get_servers(&self) -> HashMap<NodeId, CommChannels> {
         let mut map = HashMap::new();
-        for s in self.config.server.iter() {
+        for s in &self.config.server {
             if let Some(channel) = self.node_command_channels.get(&s.id) {
                 map.insert(
                     s.id,
@@ -345,49 +354,5 @@ impl NetworkInitializer<Running> {
 
     fn get_network_view(&self) -> Network {
         self.network_view.clone().expect("Network not Initialized")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    // tests/network_initializer_tests.rs
-
-    use crate::network_initializer::Uninitialized;
-    use common::types::NodeCommand;
-
-    use super::NetworkInitializer;
-
-    #[test]
-    fn test_getters_after_running() {
-        let config_path = "./config/butterfly.toml";
-        let mut running = NetworkInitializer::<Uninitialized>::new(config_path)
-            .initialize()
-            .start_simulation();
-
-        // Check clients, servers, drones maps
-        let drones = running.get_drones();
-        let clients = running.get_clients();
-        let servers = running.get_servers();
-
-        assert!(!clients.is_empty(), "Clients should not be empty");
-        assert!(!servers.is_empty(), "Servers should not be empty");
-
-        // Drones may be optional depending on config
-        // but if present, check channels are usable
-        for (_, (tx, rx)) in drones {
-            assert!(tx.send(wg_internal::controller::DroneCommand::Crash).is_ok());
-            // we can't fully check rx without running simulation events
-        }
-
-        for (_, (tx, rx)) in clients {
-            assert!(tx.send(Box::new(NodeCommand::Shutdown)).is_ok());
-            // we can't fully check rx without running simulation events
-        }
-
-        for (_, (tx, rx)) in servers {
-            assert!(tx.send(Box::new(NodeCommand::Shutdown)).is_ok());
-            // we can't fully check rx without running simulation events
-        }
-        running.stop_simulation();
     }
 }
