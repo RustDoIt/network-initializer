@@ -78,7 +78,7 @@ mod tests {
 
         // Drones may be optional depending on config
         // but if present, check channels are usable
-        for (_, (tx, _rx)) in drones {
+        for (_, (_, tx)) in drones.iter() {
             assert!(
                 tx.send(wg_internal::controller::DroneCommand::Crash)
                     .is_ok()
@@ -86,12 +86,12 @@ mod tests {
             // we can't fully check rx without running simulation events
         }
 
-        for (_, (tx, _rx)) in clients {
+        for (_, (_, tx)) in clients {
             assert!(tx.send(Box::new(NodeCommand::Shutdown)).is_ok());
             // we can't fully check rx without running simulation events
         }
 
-        for (_, (tx, _rx)) in servers {
+        for (_, (_, tx)) in servers {
             assert!(tx.send(Box::new(NodeCommand::Shutdown)).is_ok());
             // we can't fully check rx without running simulation events
         }
