@@ -319,13 +319,13 @@ impl NetworkInitializer<Running> {
     }
 
     #[must_use]
-    pub fn get_drones(&self) -> HashMap<NodeId, (Sender<DroneCommand>, Receiver<DroneEvent>)> {
+    pub fn get_drones(&self) -> HashMap<NodeId, Sender<DroneCommand>> {
         let mut map = HashMap::new();
         for d in &self.config.client {
             if let Some(channel) = self.drone_command_channels.get(&d.id) {
                 map.insert(
                     d.id,
-                    (channel.clone(), self.drone_event_channel.get_receiver()),
+                    channel.clone(),
                 );
             }
         }
