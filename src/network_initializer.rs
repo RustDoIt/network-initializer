@@ -18,8 +18,6 @@ use wg_internal::drone::Drone;
 use wg_internal::network::NodeId;
 use wg_internal::packet::{NodeType, Packet};
 
-type CommChannels = (Sender<Box<dyn Command>>, Receiver<Box<dyn Event>>);
-
 pub struct Uninitialized;
 pub struct Initialized;
 pub struct Running;
@@ -311,6 +309,16 @@ impl NetworkInitializer<Running> {
     }
 
     #[must_use]
+    pub fn get_nodes_event_receiver(&self) -> Receiver<Box<dyn Event>> {
+        self.node_event_channel.get_receiver()
+    }
+
+    #[must_use]
+    pub fn get_drones_event_receiver(&self) -> Receiver<DroneEvent> {
+        self.drone_event_channel.get_receiver()
+    }
+
+    #[must_use]
     pub fn get_drones(&self) -> HashMap<NodeId, (Sender<DroneCommand>, Receiver<DroneEvent>)> {
         let mut map = HashMap::new();
         for d in &self.config.client {
@@ -325,34 +333,31 @@ impl NetworkInitializer<Running> {
     }
 
     #[must_use]
-    pub fn get_clients(&self) -> HashMap<NodeId, CommChannels> {
+    pub fn get_clients(&self) -> HashMap<NodeId, Sender<Box<dyn Command>>> {
         let mut map = HashMap::new();
         for c in &self.config.client {
             if let Some(channel) = self.node_command_channels.get(&c.id) {
-                map.insert(
-                    c.id,
-                    (channel.clone(), self.node_event_channel.get_receiver()),
-                );
+                map.insert(c.id, channel.clone());
             }
         }
         map
     }
 
     #[must_use]
-    pub fn get_servers(&self) -> HashMap<NodeId, CommChannels> {
+    pub fn get_servers(&self) -> HashMap<NodeId, Sender<Box<dyn Command>>> {
         let mut map = HashMap::new();
         for s in &self.config.server {
             if let Some(channel) = self.node_command_channels.get(&s.id) {
-                map.insert(
-                    s.id,
-                    (channel.clone(), self.node_event_channel.get_receiver()),
-                );
+                map.insert(s.id, channel.clone());
             }
         }
         map
     }
 
-    fn get_network_view(&self) -> Network {
+    #[must_use]
+    /// # Panics
+    /// Panisce if not Initialized
+    pub fn get_network_view(&self) -> Network {
         self.network_view.clone().expect("Network not Initialized")
     }
 }
