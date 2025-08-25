@@ -1450,7 +1450,6 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
- "tokio",
  "uuid",
  "wg_internal",
 ]
