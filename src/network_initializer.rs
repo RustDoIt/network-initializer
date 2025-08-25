@@ -34,7 +34,7 @@ pub struct NetworkInitializer<State = Uninitialized> {
     // controller receives events from nodes
     node_event_channel: Channel<Box<dyn Event>>,
     total_nodes: usize,
-    config: Config,
+    pub(crate) config: Config,
     // do not exists
     state: std::marker::PhantomData<State>,
     // TODO: create topology based on config
@@ -109,7 +109,8 @@ impl NetworkInitializer<Uninitialized> {
                     d.pdr,
                 ));
             }
-            self.drone_command_channels.insert(d.id, command_channel.get_sender());
+            self.drone_command_channels
+                .insert(d.id, command_channel.get_sender());
         }
 
         self.initialized_drones =
@@ -175,7 +176,7 @@ impl NetworkInitializer<Uninitialized> {
             let node_type: CommonNodeType;
 
             let command_channel = Channel::new();
-          
+
             match i % 3 {
                 0 => {
                     server = Box::new(TextServer::new(
@@ -186,7 +187,6 @@ impl NetworkInitializer<Uninitialized> {
                         self.node_event_channel.get_sender(),
                     ));
                     node_type = CommonNodeType::TextServer;
-
                 }
                 1 => {
                     server = Box::new(MediaServer::new(
@@ -197,7 +197,6 @@ impl NetworkInitializer<Uninitialized> {
                         self.node_event_channel.get_sender(),
                     ));
                     node_type = CommonNodeType::MediaServer;
-
                 }
                 2 => {
                     server = Box::new(ChatServer::new(
@@ -208,29 +207,26 @@ impl NetworkInitializer<Uninitialized> {
                         self.node_event_channel.get_sender(),
                     ));
                     node_type = CommonNodeType::ChatServer;
-
                 }
                 _ => unreachable!(),
             }
             self.communications_channels.insert(s.id, packet_channel);
             self.node_command_channels
-            .insert(s.id, (node_type, command_channel.get_sender()));
+                .insert(s.id, (node_type, command_channel.get_sender()));
             self.initialized_servers.push(server);
-
         }
     }
 
     fn inizialize_network_view(&mut self) {
         let mut network = Network::default();
-        for ((d, c), s) in self
-            .config
-            .drone
-            .iter()
-            .zip(self.config.client.iter())
-            .zip(self.config.server.iter())
-        {
+        for d in &self.config.drone {
             network.add_node_controller_view(d.id, NodeType::Drone, &d.connected_node_ids);
+        }
+        for c in &self.config.client {
             network.add_node_controller_view(c.id, NodeType::Client, &c.connected_drone_ids);
+        }
+
+        for s in &self.config.server {
             network.add_node_controller_view(s.id, NodeType::Server, &s.connected_drone_ids);
         }
         self.network_view = Some(network);
@@ -265,7 +261,9 @@ impl NetworkInitializer<Initialized> {
             self.node_handles.push(handle);
         }
         for mut client in self.initialized_clients.drain(..) {
-            let handle = std::thread::spawn(move || client.run());
+            let handle = std::thread::spawn(move || {
+                client.run();
+            });
             self.node_handles.push(handle);
         }
         for mut server in self.initialized_servers.drain(..) {
@@ -321,8 +319,27 @@ impl NetworkInitializer<Running> {
     /// # Panics
     /// Panics if it cannot join handle
     pub fn stop_simulation(&mut self) {
+        for (_, channel) in self.drone_command_channels.drain() {
+            let _ = channel.send(DroneCommand::Crash);
+            drop(channel);
+        }
+        for (_, (_, channel)) in self.node_command_channels.drain() {
+            let _ = channel.send(Box::new(common::types::NodeCommand::Shutdown));
+            drop(channel);
+        }
+        for (_, channel) in self.communications_channels.drain() {
+            drop(channel.get_sender());
+        }
+        
         for handle in self.node_handles.drain(..) {
-            handle.join().expect("Failed to join node thread");
+            match handle.join() {
+                Ok(_) => {
+                    println!("Terminated a node thread successfully");
+                }
+                Err(e) => {
+                    eprintln!("Failed to join a node thread: {:?}", e);
+                }
+            }
         }
     }
 
