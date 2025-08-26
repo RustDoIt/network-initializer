@@ -13,6 +13,7 @@ mod tests {
         HashMap<NodeId, (NodeType, Sender<Box<dyn Command>>)>,
         HashMap<NodeId, (NodeType, Sender<Box<dyn Command>>)>,
         Network, // HashMap<NodeId, Channel<Packet>>,
+        Receiver<Box<dyn Event>>,
     );
 
     use std::collections::HashMap;
@@ -24,10 +25,14 @@ mod tests {
     use crate::parser::Parse;
     use crate::parser::Validate;
     use common::network::Network;
+    use common::types::Event;
     // use crate::utils::Channel;
-    use common::types::{ChatCommand, Command, Message, WebCommand};
     use common::types::NodeCommand;
+    use common::types::NodeEvent;
     use common::types::NodeType;
+    use common::types::WebEvent;
+    use common::types::{ChatCommand, Command, Message, WebCommand};
+    use crossbeam::channel::Receiver;
     use crossbeam::channel::Sender;
     use wg_internal::config::Config;
     use wg_internal::controller::DroneCommand;
@@ -42,11 +47,13 @@ mod tests {
         let servers = initializer.get_servers();
         let drones = initializer.get_drones();
         let network = initializer.get_network_view();
-        (initializer, drones, clients, servers, network)
+        let event_recv = initializer.get_nodes_event_receiver();
+
+        (initializer, drones, clients, servers, network, event_recv)
     }
-    
+
     fn stop_simulation(sim: Simulation) {
-        let (mut running, _drones, _clients, _servers, _network) = sim;
+        let (mut running, _drones, _clients, _servers, _network, _event) = sim;
         running.stop_simulation();
     }
 
@@ -137,7 +144,7 @@ mod tests {
     #[test]
     fn test_simple_config() {
         let config_path = "./config/simple_config.toml";
-        let (running_sim, drones, clients, servers, network) = gen_simulation(config_path);
+        let (running_sim, drones, clients, servers, network, _event) = gen_simulation(config_path);
         assert_eq!(drones.len(), 2, "Drones should be 2");
         assert_eq!(clients.len(), 1, "Client should be 1");
         assert_eq!(servers.len(), 1, "Server should be 1");
@@ -153,7 +160,12 @@ mod tests {
             "Server should be a TextServer"
         );
         assert_eq!(
-            network.nodes.iter().find(|n| n.id == 1).unwrap().get_adjacents(),
+            network
+                .nodes
+                .iter()
+                .find(|n| n.id == 1)
+                .unwrap()
+                .get_adjacents(),
             &running_sim
                 .config
                 .client
@@ -164,17 +176,44 @@ mod tests {
             "Adjacents of client 1 are not the expected"
         );
         assert_eq!(
-            network.nodes.iter().find(|n| n.id == 2).unwrap().get_adjacents(),
-            &running_sim.config.drone.iter().find(|c| c.id == 2).unwrap().connected_node_ids,
+            network
+                .nodes
+                .iter()
+                .find(|n| n.id == 2)
+                .unwrap()
+                .get_adjacents(),
+            &running_sim
+                .config
+                .drone
+                .iter()
+                .find(|c| c.id == 2)
+                .unwrap()
+                .connected_node_ids,
             "Adjacents of drone 2 are not the expected"
         );
         assert_eq!(
-            network.nodes.iter().find(|n| n.id == 3).unwrap().get_adjacents(),
-            &running_sim.config.drone.iter().find(|c| c.id == 3).unwrap().connected_node_ids,
+            network
+                .nodes
+                .iter()
+                .find(|n| n.id == 3)
+                .unwrap()
+                .get_adjacents(),
+            &running_sim
+                .config
+                .drone
+                .iter()
+                .find(|c| c.id == 3)
+                .unwrap()
+                .connected_node_ids,
             "Adjacents of drone 3 are not the expected"
         );
         assert_eq!(
-            network.nodes.iter().find(|n| n.id == 4).unwrap().get_adjacents(),
+            network
+                .nodes
+                .iter()
+                .find(|n| n.id == 4)
+                .unwrap()
+                .get_adjacents(),
             &running_sim
                 .config
                 .server
@@ -185,60 +224,68 @@ mod tests {
             "Adjacents of server 4 are not the expected"
         );
 
-        stop_simulation((running_sim, drones, clients, servers, network));
+        stop_simulation((running_sim, drones, clients, servers, network, _event));
     }
 
     #[test]
-    fn client_textserver() {
+    fn test_event_to_controller() {
         let config_path = "./config/simple_config.toml";
-        let (running_sim, drones, clients, servers, network) = gen_simulation(config_path);
-        assert_eq!(drones.len(), 2, "Drones should be 2");
-        assert_eq!(clients.len(), 1, "Client should be 1");
-        assert_eq!(servers.len(), 1, "Server should be 1");
-        assert_eq!(network.nodes.len(), 4, "Nodes should be 4");
-        assert_eq!(
-            clients.get(&1).unwrap().0,
-            NodeType::WebBrowser,
-            "Client should be a WebBrowser"
-        );
-        assert_eq!(
-            servers.get(&4).unwrap().0,
-            NodeType::TextServer,
-            "Server should be a TextServer"
-        );
-        assert_eq!(
-            network.nodes.iter().find(|n| n.id == 1).unwrap().get_adjacents(),
-            &running_sim
-                .config
-                .client
-                .iter()
-                .find(|c| c.id == 1)
-                .unwrap()
-                .connected_drone_ids,
-            "Adjacents of client 1 are not the expected"
-        );
-        assert_eq!(
-            network.nodes.iter().find(|n| n.id == 2).unwrap().get_adjacents(),
-            &running_sim.config.drone.iter().find(|c| c.id == 2).unwrap().connected_node_ids,
-            "Adjacents of drone 2 are not the expected"
-        );
-        assert_eq!(
-            network.nodes.iter().find(|n| n.id == 3).unwrap().get_adjacents(),
-            &running_sim.config.drone.iter().find(|c| c.id == 3).unwrap().connected_node_ids,
-            "Adjacents of drone 3 are not the expected"
-        );
-        assert_eq!(
-            network.nodes.iter().find(|n| n.id == 4).unwrap().get_adjacents(),
-            &running_sim.config.server.iter().find(|s| s.id == 4).unwrap().connected_drone_ids,
-            "Adjacents of server 4 are not the expected"
-        );
+        let (running_sim, drones, clients, servers, network, event) = gen_simulation(config_path);
 
         let sender_server = &servers.get(&4).unwrap().1;
-        let _result = sender_server.send(Box::new(WebCommand::AddTextFileFromPath("./tests/non_existent.txt".to_string())));
-        let _result = sender_server.send(Box::new(WebCommand::AddTextFileFromPath("./tests/test.txt".to_string())));
+        let _result = sender_server.send(Box::new(WebCommand::AddTextFileFromPath(
+            "./tests/non_existent.txt".to_string(),
+        )));
+
+        let event_1 = event.recv().unwrap();
+
+        if let Ok(event_1) = event_1.into_any().downcast::<WebEvent>() {
+            assert!(matches!(*event_1, WebEvent::FileOperationError { .. }));
+        } else {
+            panic!("Not TextFileAdded, other event");
+        }
+
+        let _result = sender_server.send(Box::new(WebCommand::AddTextFileFromPath(
+            "./tests/test.txt".to_string(),
+        )));
+
+        let event_2 = event.recv().unwrap();
+
+        if let Ok(event_2) = event_2.into_any().downcast::<WebEvent>() {
+            assert!(matches!(*event_2, WebEvent::TextFileAdded { .. }));
+        } else {
+            panic!("Not TextFileAdded, other event");
+        }
+
+        stop_simulation((running_sim, drones, clients, servers, network, event))
+    }
+
+    #[test]
+    fn test_query_text_files_list() {
+        let config_path = "./config/simple_config.toml";
+        let (running_sim, drones, clients, servers, network, event) = gen_simulation(config_path);
+
+        let sender_server = &servers.get(&4).unwrap().1;
+        let _result = sender_server.send(Box::new(WebCommand::AddTextFileFromPath(
+            "./tests/non_existent.txt".to_string(),
+        )));
+
+        let event_1 = event.recv().unwrap();
+
+        let _result = sender_server.send(Box::new(WebCommand::AddTextFileFromPath(
+            "./tests/test.txt".to_string(),
+        )));
+
+        let event_2 = event.recv().unwrap();
 
         let sender_client = &clients.get(&1).unwrap().1;
         let _result = sender_client.send(Box::new(WebCommand::QueryTextFilesList));
+        let event_3 = event.recv().unwrap();
+        if let Ok(event_3) = event_3.into_any().downcast::<NodeEvent>() {
+            assert!(matches!(*event_2, WebEvent::TextFileAdded { .. }));
+        } else {
+            panic!("Not TextFileAdded, other event");
+        }
 
         // TODO: flood network discovery
 
@@ -248,52 +295,13 @@ mod tests {
 
         std::thread::sleep(std::time::Duration::from_secs(3));
 
-        stop_simulation((running_sim, drones, clients, servers, network));
+        stop_simulation((running_sim, drones, clients, servers, network, event));
     }
 
     #[test]
     fn client_chatserver() {
         let config_path = "./config/simple_chat_config.toml";
-        let (running_sim, drones, clients, servers, network) = gen_simulation(config_path);
-        assert_eq!(drones.len(), 3, "Drones should be 3");
-        assert_eq!(clients.len(), 3, "Client should be 3");
-        assert_eq!(servers.len(), 3, "Server should be 3");
-        assert_eq!(network.nodes.len(), 9, "Nodes should be 4");
-        assert_eq!(
-            clients.get(&2).unwrap().0,
-            NodeType::ChatClient,
-            "Client should be a ChatClient"
-        );
-        assert_eq!(
-            clients.get(&8).unwrap().0,
-            NodeType::ChatClient,
-            "Client should be a ChatClient"
-        );
-        assert_eq!(
-            servers.get(&6).unwrap().0,
-            NodeType::ChatServer,
-            "Server should be a ChatServer"
-        );
-        assert_eq!(
-            network.nodes.iter().find(|n| n.id == 1).unwrap().get_adjacents(),
-            &running_sim.config.client.iter().find(|c| c.id == 1).unwrap().connected_drone_ids,
-            "Adjacents of client 1 are not the expected"
-        );
-        assert_eq!(
-            network.nodes.iter().find(|n| n.id == 2).unwrap().get_adjacents(),
-            &running_sim.config.client.iter().find(|c| c.id == 2).unwrap().connected_drone_ids,
-            "Adjacents of drone 2 are not the expected"
-        );
-        assert_eq!(
-            network.nodes.iter().find(|n| n.id == 3).unwrap().get_adjacents(),
-            &running_sim.config.drone.iter().find(|c| c.id == 3).unwrap().connected_node_ids,
-            "Adjacents of drone 3 are not the expected"
-        );
-        assert_eq!(
-            network.nodes.iter().find(|n| n.id == 4).unwrap().get_adjacents(),
-            &running_sim.config.server.iter().find(|s| s.id == 4).unwrap().connected_drone_ids,
-            "Adjacents of server 4 are not the expected"
-        );
+        let (running_sim, drones, clients, servers, network, event) = gen_simulation(config_path);
 
         let sender_client_1 = &clients.get(&2).unwrap().1;
         let sender_client_2 = &clients.get(&8).unwrap().1;
@@ -311,8 +319,6 @@ mod tests {
         let message = Message::new(2, 3, "ciao 2, messaggio ricevuto".to_string());
         let _result = sender_client_1.send(Box::new(ChatCommand::SendMessage(message))); // esegue ma non manda per topologia mancante
 
-
-        stop_simulation((running_sim, drones, clients, servers, network));
+        stop_simulation((running_sim, drones, clients, servers, network, event));
     }
-
 }

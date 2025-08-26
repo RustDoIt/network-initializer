@@ -319,6 +319,9 @@ impl NetworkInitializer<Running> {
     /// Panics if it cannot join handle
     pub fn stop_simulation(&mut self) {
         for (id, (node_type, channel)) in self.node_command_channels.drain() {
+            if let Some(packet_sender) = self.communications_channels.remove(&id) {
+                drop(packet_sender);
+            }
             let _ = channel.send(Box::new(NodeCommand::Shutdown));
             match self.node_handles.remove(&id) {
                 Some(handle) => match handle.join() {
@@ -335,6 +338,9 @@ impl NetworkInitializer<Running> {
             }
         }
         for (id,  channel) in self.drone_command_channels.drain() {
+            if let Some(packet_sender) = self.communications_channels.remove(&id) {
+                drop(packet_sender);
+            }
             let _ = channel.send(DroneCommand::Crash);
             match self.node_handles.remove(&id) {
                 Some(handle) => match handle.join() {

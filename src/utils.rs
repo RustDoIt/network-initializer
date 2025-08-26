@@ -89,24 +89,25 @@ macro_rules! drone_factories {
 
 drone_factories!(
     // CppEnjoyersDrone,
-    RustDoIt, // --> termina
+    // RustDoIt, // --> termina
     // DroneDrone,
-    DrOnesDrone, // --> termina
+    // DrOnesDrone, // --> termina
     // LockheedRustin,
     // NullPointerDrone,
     // RustafarianDrone,
     RustBustersDrone, // --> termina
-    // RustezeDrone,
+    RustezeDrone,
     // RustyDrone,
     // RustDrone,
 );
 
 pub(crate) fn generate_drone(
-    i: usize,
+    i: usize, 
     controller_send: &Sender<DroneEvent>,
     drone_attributes: DroneAttributes,
 ) -> Box<dyn DroneTrait>{
-    let factory = FACTORIES[i % FACTORIES.len()];
+    
+    let factory = FACTORIES[i % FACTORIES.len()]; 
     factory(
         drone_attributes.0,
         controller_send.clone(),
@@ -115,7 +116,6 @@ pub(crate) fn generate_drone(
         drone_attributes.3,
         drone_attributes.4,
     )
-    
 }
 
 #[derive(Clone)]
