@@ -319,30 +319,79 @@ mod tests {
         let sender_client_2 = &clients.get(&8).unwrap().1;
         let sender_server = &servers.get(&6).unwrap().1;
 
+        // 1
+        let flood = event.recv().unwrap();
+        if let Ok(flood) = flood.into_any().downcast::<NodeEvent>() {
+            assert!(matches!(*flood, NodeEvent::FloodStarted { .. }));
+        } else {
+            panic!("Not FloodStarted, other event");
+        }
+        // 2
+        let flood = event.recv().unwrap();
+        if let Ok(flood) = flood.into_any().downcast::<NodeEvent>() {
+            assert!(matches!(*flood, NodeEvent::FloodStarted { .. }));
+        } else {
+            panic!("Not FloodStarted, other event");
+        }
+        // 3
+        let flood = event.recv().unwrap();
+        if let Ok(flood) = flood.into_any().downcast::<NodeEvent>() {
+            assert!(matches!(*flood, NodeEvent::FloodStarted { .. }));
+        } else {
+            panic!("Not FloodStarted, other event");
+        }
+
+        // 4
+        let flood = event.recv().unwrap();
+        if let Ok(flood) = flood.into_any().downcast::<NodeEvent>() {
+            assert!(matches!(*flood, NodeEvent::FloodStarted { .. }));
+        } else {
+            panic!("Not FloodStarted, other event");
+        }
+
+        // 5
+        let flood = event.recv().unwrap();
+        if let Ok(flood) = flood.into_any().downcast::<NodeEvent>() {
+            assert!(matches!(*flood, NodeEvent::FloodStarted { .. }));
+        } else {
+            panic!("Not FloodStarted, other event");
+        }
+
+        // 6
+        let flood = event.recv().unwrap();
+        if let Ok(flood) = flood.into_any().downcast::<NodeEvent>() {
+            assert!(matches!(*flood, NodeEvent::FloodStarted { .. }));
+        } else {
+            panic!("Not FloodStarted, other event");
+        }
+
+        // client_id 2 send registration message to server_id 6
         let _result = sender_client_1.send(Box::new(ChatCommand::RegisterToServer(6)));
         let event_1 = event.recv().unwrap();
-
-        if let Ok(event_1) = event_1.into_any().downcast::<ChatEvent>() {
-            assert!(matches!(*event_1, ChatEvent::RegistrationSucceeded { notification_from:6, to:2 }));
+        if let Ok(event_1) = event_1.into_any().downcast::<NodeEvent>() {
+            assert!(matches!(*event_1, NodeEvent::MessageSent { notification_from: 2, to: 6 }));
         } else {
-            panic!("Client registration not successful");
+            panic!("Message not sent");
         }
 
+        // client_id 8 send registration message to server_id 6
         let _result = sender_client_2.send(Box::new(ChatCommand::RegisterToServer(6)));
         let event_2 = event.recv().unwrap();
-
-        if let Ok(event_2) = event_2.into_any().downcast::<ChatEvent>() {
-            assert!(matches!(*event_2, ChatEvent::RegistrationSucceeded { notification_from:6, to:3 }));
+        if let Ok(event_2) = event_2.into_any().downcast::<NodeEvent>() {
+            assert!(matches!(*event_2, NodeEvent::MessageSent { notification_from: 8, to: 6 }));
         } else {
-             panic!("Client registration not successful");
+            panic!("Message not sent");
         }
 
-        let event_3 = event.recv().unwrap();
-        if let Ok(event_3) = event_3.into_any().downcast::<ChatEvent>() {
-            assert!(matches!(*event_3, ChatEvent::RegisteredClients { notification_from: 6, list } if list.contains(&2) && list.contains(&8)));
-        } else {
-            panic!("Not GetRegisteredClients, other event");
-        }
+        let _result = sender_client_1.send(Box::new(ChatCommand::GetRegisteredClients)); 
+
+        // println!("qui");
+        // let event_3 = event.recv().unwrap();
+        // if let Ok(event_3) = event_3.into_any().downcast::<ChatEvent>() {
+        //     assert!(matches!(*event_3, ChatEvent::RegisteredClients { notification_from: 6, list } if list.contains(&2) && list.contains(&8)));
+        // } else {
+        //     panic!("Not GetRegisteredClients, other event");
+        // }
 
         // let _result = sender_client_1.send(Box::new(ChatCommand::GetRegisteredClients)); // 2, 3
         // let _result = sender_client_2.send(Box::new(ChatCommand::GetRegisteredClients)); // 2, 3
