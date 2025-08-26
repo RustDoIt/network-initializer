@@ -96,7 +96,7 @@ drone_factories!(
     // NullPointerDrone,
     // RustafarianDrone,
     RustBustersDrone, // --> termina
-    RustezeDrone,
+    // RustezeDrone,
     // RustyDrone,
     // RustDrone,
 );

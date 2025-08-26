@@ -1111,6 +1111,7 @@ dependencies = [
  "rustbusters-drone",
  "rusteze_drone",
  "rusty_drones",
+ "serde_json",
  "server",
  "toml 0.9.5",
  "wg_2024-rust",
