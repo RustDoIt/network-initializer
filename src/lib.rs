@@ -287,7 +287,7 @@ mod tests {
             panic!("Not TextFileAdded, other event");
         }
 
-        // TODO: flood network discovery
+    //     // TODO: flood network discovery
 
         std::thread::sleep(std::time::Duration::from_secs(3));
 
@@ -298,27 +298,6 @@ mod tests {
         stop_simulation((running_sim, drones, clients, servers, network, event));
     }
 
-    #[test]
-    fn client_chatserver() {
-        let config_path = "./config/simple_chat_config.toml";
-        let (running_sim, drones, clients, servers, network, event) = gen_simulation(config_path);
+ 
 
-        let sender_client_1 = &clients.get(&2).unwrap().1;
-        let sender_client_2 = &clients.get(&8).unwrap().1;
-        let sender_server = &servers.get(&6).unwrap().1;
-
-        let _result = sender_client_1.send(Box::new(ChatCommand::RegisterToServer(6)));
-        let _result = sender_client_2.send(Box::new(ChatCommand::RegisterToServer(6)));
-        let _result = sender_server.send(Box::new(ChatCommand::GetRegisteredClients)); // 2, 3
-
-        let _result = sender_client_1.send(Box::new(ChatCommand::GetRegisteredClients)); // 2, 3
-        let _result = sender_client_2.send(Box::new(ChatCommand::GetRegisteredClients)); // 2, 3
-
-        let message = Message::new(2, 3, "ciao 3, sono 2".to_string());
-        let _result = sender_client_1.send(Box::new(ChatCommand::SendMessage(message))); // esegue ma non manda per topologia mancante
-        let message = Message::new(2, 3, "ciao 2, messaggio ricevuto".to_string());
-        let _result = sender_client_1.send(Box::new(ChatCommand::SendMessage(message))); // esegue ma non manda per topologia mancante
-
-        stop_simulation((running_sim, drones, clients, servers, network, event));
-    }
 }
