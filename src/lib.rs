@@ -261,43 +261,43 @@ mod tests {
         stop_simulation((running_sim, drones, clients, servers, network, event))
     }
 
-    // #[test]
-    // fn test_query_text_files_list() {
-    //     let config_path = "./config/simple_config.toml";
-    //     let (running_sim, drones, clients, servers, network, event) = gen_simulation(config_path);
+    #[test]
+    fn test_query_text_files_list() {
+        let config_path = "./config/simple_config.toml";
+        let (running_sim, drones, clients, servers, network, event) = gen_simulation(config_path);
 
-    //     let sender_server = &servers.get(&4).unwrap().1;
-    //     let _result = sender_server.send(Box::new(WebCommand::AddTextFileFromPath(
-    //         "./tests/non_existent.txt".to_string(),
-    //     )));
+        let sender_server = &servers.get(&4).unwrap().1;
+        let _result = sender_server.send(Box::new(WebCommand::AddTextFileFromPath(
+            "./tests/non_existent.txt".to_string(),
+        )));
 
-    //     let event_1 = event.recv().unwrap();
+        let event_1 = event.recv().unwrap();
 
-    //     let _result = sender_server.send(Box::new(WebCommand::AddTextFileFromPath(
-    //         "./tests/test.txt".to_string(),
-    //     )));
+        let _result = sender_server.send(Box::new(WebCommand::AddTextFileFromPath(
+            "./tests/test.txt".to_string(),
+        )));
 
-    //     let event_2 = event.recv().unwrap();
+        let event_2 = event.recv().unwrap();
 
-    //     let sender_client = &clients.get(&1).unwrap().1;
-    //     let _result = sender_client.send(Box::new(WebCommand::QueryTextFilesList));
-    //     let event_3 = event.recv().unwrap();
-    //     if let Ok(event_3) = event_3.into_any().downcast::<NodeEvent>() {
-    //         assert!(matches!(*event_2, WebEvent::TextFileAdded { .. }));
-    //     } else {
-    //         panic!("Not TextFileAdded, other event");
-    //     }
+        let sender_client = &clients.get(&1).unwrap().1;
+        let _result = sender_client.send(Box::new(WebCommand::QueryTextFilesList));
+        let event_3 = event.recv().unwrap();
+        if let Ok(event_3) = event_3.into_any().downcast::<NodeEvent>() {
+            assert!(matches!(*event_2, WebEvent::TextFileAdded { .. }));
+        } else {
+            panic!("Not TextFileAdded, other event");
+        }
 
-    //     // TODO: flood network discovery
+        // TODO: flood network discovery
 
-    //     std::thread::sleep(std::time::Duration::from_secs(3));
+        std::thread::sleep(std::time::Duration::from_secs(3));
 
-    //     let _result = sender_client.send(Box::new(WebCommand::GetTextFilesList));
+        let _result = sender_client.send(Box::new(WebCommand::GetTextFilesList));
 
-    //     std::thread::sleep(std::time::Duration::from_secs(3));
+        std::thread::sleep(std::time::Duration::from_secs(3));
 
-    //     stop_simulation((running_sim, drones, clients, servers, network, event));
-    // }
+        stop_simulation((running_sim, drones, clients, servers, network, event));
+    }
 
     #[test]
     fn client_chatserver() {
