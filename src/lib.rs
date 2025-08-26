@@ -232,11 +232,22 @@ mod tests {
         let config_path = "./config/simple_config.toml";
         let (running_sim, drones, clients, servers, network, event) = gen_simulation(config_path);
 
+        for _ in 0..2 {
+            let evt = event.recv().unwrap();
+            let evt = evt.into_any();
+
+            if let Some(evt) = evt.downcast_ref::<NodeEvent>() {
+                assert!(matches!(*evt, NodeEvent::FloodStarted { .. }));
+                
+            } else {
+                panic!("No FloodStarted event received, received other event: {evt:?}");
+            }
+        }
         let sender_server = &servers.get(&4).unwrap().1;
         let _result = sender_server.send(Box::new(WebCommand::AddTextFileFromPath(
             "./tests/non_existent.txt".to_string(),
         )));
-
+        
         let event_1 = event.recv().unwrap();
 
         if let Ok(event_1) = event_1.into_any().downcast::<WebEvent>() {
@@ -257,7 +268,7 @@ mod tests {
             panic!("Not TextFileAdded, other event");
         }
 
-        stop_simulation((running_sim, drones, clients, servers, network, event))
+        stop_simulation((running_sim, drones, clients, servers, network, event));
     }
 
     #[test]
@@ -282,7 +293,7 @@ mod tests {
         let _result = sender_client.send(Box::new(WebCommand::QueryTextFilesList));
         let event_3 = event.recv().unwrap();
         if let Ok(event_3) = event_3.into_any().downcast::<NodeEvent>() {
-            assert!(matches!(*event_2, WebEvent::TextFileAdded { .. }));
+            assert!(matches!(*event_3, NodeEvent::MessageSent { .. }));
         } else {
             panic!("Not TextFileAdded, other event");
         }
