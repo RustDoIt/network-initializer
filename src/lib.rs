@@ -114,7 +114,7 @@ mod tests {
 
         // Drones may be optional depending on config
         // but if present, check channels are usable
-        for (_, (_, tx)) in drones.iter() {
+        for (_, (_, tx)) in &drones {
             assert!(
                 tx.send(wg_internal::controller::DroneCommand::Crash)
                     .is_ok()

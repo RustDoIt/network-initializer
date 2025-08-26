@@ -2,12 +2,12 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 use crate::parser::{Parse, Validate};
-use crate::utils::{Channel, generate_drones};
+use crate::utils::{Channel, generate_drone};
 use client::chat_client::ChatClient;
 use client::web_browser::WebBrowser;
 use common::Processor;
 use common::network::Network;
-use common::types::{Command, Event, NodeType as CommonNodeType};
+use common::types::{Command, Event, NodeCommand, NodeType as CommonNodeType};
 use crossbeam::channel::{Receiver, Sender};
 use server::{ChatServer, MediaServer, TextServer};
 use std::collections::HashMap;
@@ -37,16 +37,16 @@ pub struct NetworkInitializer<State = Uninitialized> {
     pub(crate) config: Config,
     // do not exists
     state: std::marker::PhantomData<State>,
-    // TODO: create topology based on config
+    
     network_view: Option<Network>,
 
     // these are needed to NetworkInitializer<Running> to run each node
-    initialized_clients: Vec<Box<dyn Processor + Send>>,
-    initialized_servers: Vec<Box<dyn Processor + Send>>,
-    initialized_drones: Vec<Box<dyn Drone>>,
+    initialized_clients: HashMap<NodeId, Box<dyn Processor + Send>>,
+    initialized_servers: HashMap<NodeId, Box<dyn Processor + Send>>,
+    initialized_drones: HashMap<NodeId, Box<dyn Drone>>,
 
     // to keep track of threads and join them at the end
-    node_handles: Vec<JoinHandle<()>>,
+    node_handles: HashMap<NodeId, JoinHandle<()>>,
 }
 
 impl NetworkInitializer<Uninitialized> {
@@ -67,10 +67,10 @@ impl NetworkInitializer<Uninitialized> {
             // do not exists
             state: std::marker::PhantomData,
             network_view: None,
-            initialized_clients: Vec::new(),
-            initialized_servers: Vec::new(),
-            initialized_drones: Vec::new(),
-            node_handles: Vec::new(),
+            initialized_clients: HashMap::new(),
+            initialized_servers: HashMap::new(),
+            initialized_drones: HashMap::new(),
+            node_handles: HashMap::new(),
         }
     }
 
@@ -84,37 +84,36 @@ impl NetworkInitializer<Uninitialized> {
     }
 
     fn initialize_drones(&mut self) {
-        let mut drones_attributes = Vec::new();
         // first create all channelsWW
         for d in &self.config.drone {
             self.communications_channels.insert(d.id, Channel::new());
         }
 
         // then this
-        for d in &self.config.drone {
-            let command_channel = Channel::new();
-            let mut neighbors = HashMap::new();
-            for id in &d.connected_node_ids {
-                if let Some(channel) = self.communications_channels.get(id) {
-                    neighbors.insert(*id, channel.get_sender());
-                }
-            }
+        for (i, d) in self.config.drone.iter().enumerate() {
             // initializing receiver channel of the drone
             if let Some(packet_receiver) = self.communications_channels.get(&d.id) {
-                drones_attributes.push((
+                let command_channel = Channel::new();
+                let mut neighbors = HashMap::new();
+                for id in &d.connected_node_ids {
+                    if let Some(channel) = self.communications_channels.get(id) {
+                        neighbors.insert(*id, channel.get_sender());
+                    }
+                }
+            
+                self.drone_command_channels
+                    .insert(d.id, command_channel.get_sender());
+                self.initialized_drones.insert(d.id, generate_drone(i, &self.drone_event_channel.sender, (
                     d.id,
                     command_channel.get_receiver(),
                     packet_receiver.get_receiver(),
                     neighbors,
                     d.pdr,
-                ));
+                )));
             }
-            self.drone_command_channels
-                .insert(d.id, command_channel.get_sender());
         }
 
-        self.initialized_drones =
-            generate_drones(&self.drone_event_channel.sender, drones_attributes);
+        
     }
 
     fn initialize_clients(&mut self) {
@@ -159,7 +158,7 @@ impl NetworkInitializer<Uninitialized> {
                 .insert(c.id, (node_type, command_channel.get_sender()));
 
             // save the client
-            self.initialized_clients.push(client);
+            self.initialized_clients.insert(c.id, client);
         }
     }
 
@@ -213,7 +212,7 @@ impl NetworkInitializer<Uninitialized> {
             self.communications_channels.insert(s.id, packet_channel);
             self.node_command_channels
                 .insert(s.id, (node_type, command_channel.get_sender()));
-            self.initialized_servers.push(server);
+            self.initialized_servers.insert(s.id, server);
         }
     }
 
@@ -248,29 +247,29 @@ impl NetworkInitializer<Initialized> {
             initialized_clients: initializer.initialized_clients,
             initialized_servers: initializer.initialized_servers,
             initialized_drones: initializer.initialized_drones,
-            node_handles: Vec::new(),
+            node_handles: HashMap::new(),
         }
     }
 
     #[must_use]
     pub fn start_simulation(mut self) -> NetworkInitializer<Running> {
-        for mut drone in self.initialized_drones.drain(..) {
+        for  (id, mut drone) in self.initialized_drones.drain(){
             let handle = std::thread::spawn(move || {
                 drone.run();
             });
-            self.node_handles.push(handle);
+            self.node_handles.insert(id, handle);
         }
-        for mut client in self.initialized_clients.drain(..) {
+        for (id, mut client) in self.initialized_clients.drain() {
             let handle = std::thread::spawn(move || {
                 client.run();
             });
-            self.node_handles.push(handle);
+            self.node_handles.insert(id, handle);
         }
-        for mut server in self.initialized_servers.drain(..) {
+        for (id, mut server) in self.initialized_servers.drain() {
             let handle = std::thread::spawn(move || {
                 server.run();
             });
-            self.node_handles.push(handle);
+            self.node_handles.insert(id, handle);
         }
         NetworkInitializer::<Running>::new(self)
     }
@@ -319,25 +318,35 @@ impl NetworkInitializer<Running> {
     /// # Panics
     /// Panics if it cannot join handle
     pub fn stop_simulation(&mut self) {
-        for (_, channel) in self.drone_command_channels.drain() {
-            let _ = channel.send(DroneCommand::Crash);
-            drop(channel);
-        }
-        for (_, (_, channel)) in self.node_command_channels.drain() {
-            let _ = channel.send(Box::new(common::types::NodeCommand::Shutdown));
-            drop(channel);
-        }
-        for (_, channel) in self.communications_channels.drain() {
-            drop(channel.get_sender());
-        }
-        
-        for handle in self.node_handles.drain(..) {
-            match handle.join() {
-                Ok(_) => {
-                    println!("Terminated a node thread successfully");
+        for (id, (node_type, channel)) in self.node_command_channels.drain() {
+            let _ = channel.send(Box::new(NodeCommand::Shutdown));
+            match self.node_handles.remove(&id) {
+                Some(handle) => match handle.join() {
+                    Ok(()) => {
+                        println!("Terminated a {node_type:?} thread successfully");
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to join a {node_type:?} thread: {e:?}");
+                    }
+                },
+                None => {
+                    eprintln!("No handle found for node {id}");
                 }
-                Err(e) => {
-                    eprintln!("Failed to join a node thread: {:?}", e);
+            }
+        }
+        for (id,  channel) in self.drone_command_channels.drain() {
+            let _ = channel.send(DroneCommand::Crash);
+            match self.node_handles.remove(&id) {
+                Some(handle) => match handle.join() {
+                    Ok(_) => {
+                        println!("Terminated a drone thread successfully");
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to join a drone thread: {e:?}");
+                    }
+                },
+                None => {
+                    eprintln!("No handle found for drone {id}");
                 }
             }
         }
