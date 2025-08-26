@@ -409,7 +409,7 @@ impl NetworkInitializer<Running> {
     }
 
     #[must_use]
-    fn get_comms_channels(&self) -> &HashMap<NodeId, Channel<Packet>> {
+    pub fn get_comms_channels(&self) -> &HashMap<NodeId, Channel<Packet>> {
         &self.communications_channels
     }
 }
