@@ -19,8 +19,8 @@ rusty_drones = { git = "https://github.com/rusty-drone-2024/rusty-drone.git", br
 rustbusters-drone = { git = "https://github.com/Rustbusters/drone.git", branch = "main" }
 rustafarian-drone = { git = "https://github.com/Rustafarian-Unitn/rustafarian-drone", branch = "main"}
 lockheedrustin-drone = { git = "https://github.com/Lockheed-Rustin/drone.git", branch = "main" }
+rust_do_it = { git = "https://github.com/RustDoIt/Drone.git" }
 toml = "0.9.2"
-serde = "1.0.219"
-rand = "0.9.2"
 crossbeam = "0.8.4"
 paste = "1.0.15"
+serde_json = "1.0.143"
