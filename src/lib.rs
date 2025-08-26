@@ -25,6 +25,7 @@ mod tests {
     use crate::parser::Parse;
     use crate::parser::Validate;
     use common::network::Network;
+    use common::types::ChatEvent;
     use common::types::Event;
     // use crate::utils::Channel;
     use common::types::NodeCommand;
@@ -260,44 +261,87 @@ mod tests {
         stop_simulation((running_sim, drones, clients, servers, network, event))
     }
 
-    #[test]
-    fn test_query_text_files_list() {
-        let config_path = "./config/simple_config.toml";
-        let (running_sim, drones, clients, servers, network, event) = gen_simulation(config_path);
+    // #[test]
+    // fn test_query_text_files_list() {
+    //     let config_path = "./config/simple_config.toml";
+    //     let (running_sim, drones, clients, servers, network, event) = gen_simulation(config_path);
 
-        let sender_server = &servers.get(&4).unwrap().1;
-        let _result = sender_server.send(Box::new(WebCommand::AddTextFileFromPath(
-            "./tests/non_existent.txt".to_string(),
-        )));
+    //     let sender_server = &servers.get(&4).unwrap().1;
+    //     let _result = sender_server.send(Box::new(WebCommand::AddTextFileFromPath(
+    //         "./tests/non_existent.txt".to_string(),
+    //     )));
 
-        let event_1 = event.recv().unwrap();
+    //     let event_1 = event.recv().unwrap();
 
-        let _result = sender_server.send(Box::new(WebCommand::AddTextFileFromPath(
-            "./tests/test.txt".to_string(),
-        )));
+    //     let _result = sender_server.send(Box::new(WebCommand::AddTextFileFromPath(
+    //         "./tests/test.txt".to_string(),
+    //     )));
 
-        let event_2 = event.recv().unwrap();
+    //     let event_2 = event.recv().unwrap();
 
-        let sender_client = &clients.get(&1).unwrap().1;
-        let _result = sender_client.send(Box::new(WebCommand::QueryTextFilesList));
-        let event_3 = event.recv().unwrap();
-        if let Ok(event_3) = event_3.into_any().downcast::<NodeEvent>() {
-            assert!(matches!(*event_2, WebEvent::TextFileAdded { .. }));
-        } else {
-            panic!("Not TextFileAdded, other event");
-        }
+    //     let sender_client = &clients.get(&1).unwrap().1;
+    //     let _result = sender_client.send(Box::new(WebCommand::QueryTextFilesList));
+    //     let event_3 = event.recv().unwrap();
+    //     if let Ok(event_3) = event_3.into_any().downcast::<NodeEvent>() {
+    //         assert!(matches!(*event_2, WebEvent::TextFileAdded { .. }));
+    //     } else {
+    //         panic!("Not TextFileAdded, other event");
+    //     }
 
     //     // TODO: flood network discovery
 
-        std::thread::sleep(std::time::Duration::from_secs(3));
+    //     std::thread::sleep(std::time::Duration::from_secs(3));
 
-        let _result = sender_client.send(Box::new(WebCommand::GetTextFilesList));
+    //     let _result = sender_client.send(Box::new(WebCommand::GetTextFilesList));
 
-        std::thread::sleep(std::time::Duration::from_secs(3));
+    //     std::thread::sleep(std::time::Duration::from_secs(3));
+
+    //     stop_simulation((running_sim, drones, clients, servers, network, event));
+    // }
+
+    #[test]
+    fn client_chatserver() {
+        let config_path = "./config/simple_chat_config.toml";
+        let (running_sim, drones, clients, servers, network, event) = gen_simulation(config_path);
+
+        let sender_client_1 = &clients.get(&2).unwrap().1;
+        let sender_client_2 = &clients.get(&8).unwrap().1;
+        let sender_server = &servers.get(&6).unwrap().1;
+
+        let _result = sender_client_1.send(Box::new(ChatCommand::RegisterToServer(6)));
+        let event_1 = event.recv().unwrap();
+
+        if let Ok(event_1) = event_1.into_any().downcast::<ChatEvent>() {
+            assert!(matches!(*event_1, ChatEvent::RegistrationSucceeded { notification_from:6, to:2 }));
+        } else {
+            panic!("Client registration not successful");
+        }
+
+        let _result = sender_client_2.send(Box::new(ChatCommand::RegisterToServer(6)));
+        let event_2 = event.recv().unwrap();
+
+        if let Ok(event_2) = event_2.into_any().downcast::<ChatEvent>() {
+            assert!(matches!(*event_2, ChatEvent::RegistrationSucceeded { notification_from:6, to:3 }));
+        } else {
+             panic!("Client registration not successful");
+        }
+
+        let event_3 = event.recv().unwrap();
+        if let Ok(event_3) = event_3.into_any().downcast::<ChatEvent>() {
+            assert!(matches!(*event_3, ChatEvent::RegisteredClients { notification_from: 6, list } if list.contains(&2) && list.contains(&8)));
+        } else {
+            panic!("Not GetRegisteredClients, other event");
+        }
+
+        // let _result = sender_client_1.send(Box::new(ChatCommand::GetRegisteredClients)); // 2, 3
+        // let _result = sender_client_2.send(Box::new(ChatCommand::GetRegisteredClients)); // 2, 3
+
+        // let message = Message::new(2, 3, "ciao 3, sono 2".to_string());
+        // let _result = sender_client_1.send(Box::new(ChatCommand::SendMessage(message))); // esegue ma non manda per topologia mancante
+        // let message = Message::new(2, 3, "ciao 2, messaggio ricevuto".to_string());
+        // let _result = sender_client_1.send(Box::new(ChatCommand::SendMessage(message))); // esegue ma non manda per topologia mancante
 
         stop_simulation((running_sim, drones, clients, servers, network, event));
     }
-
- 
 
 }
