@@ -16,8 +16,6 @@ mod tests {
         Receiver<Box<dyn Event>>,
     );
 
-    use std::collections::HashMap;
-    use std::time::Duration;
     use crate::errors::ConfigError;
     use crate::network_initializer::NetworkInitializer;
     use crate::network_initializer::Running;
@@ -25,22 +23,20 @@ mod tests {
     use crate::parser::Parse;
     use crate::parser::Validate;
     use common::network::Network;
-    use common::types::{Event, WebRequest};
+    use common::types::Event;
+    use std::collections::HashMap;
     // use crate::utils::Channel;
     use common::types::NodeCommand;
     use common::types::NodeEvent;
     use common::types::NodeType;
     use common::types::WebEvent;
-    use common::types::{ChatCommand, Command, Message, WebCommand};
-    use crossbeam::channel::{unbounded, Receiver};
+    use common::types::{Command, WebCommand};
+    use crossbeam::channel::Receiver;
     use crossbeam::channel::Sender;
     use wg_internal::config::Config;
     use wg_internal::controller::DroneCommand;
-    use wg_internal::drone::Drone;
     use wg_internal::network::{NodeId, SourceRoutingHeader};
-    use wg_internal::packet::{Packet, PacketType};
-    use common::Processor;
-    use common::types::NodeType::WebBrowser;
+    use wg_internal::packet::Packet;
     // use wg_internal::packet::Packet;
 
     fn gen_simulation(path: &str) -> Simulation {
@@ -60,7 +56,8 @@ mod tests {
         let (mut running, _drones, _clients, _servers, _network, _event) = sim;
         running.stop_simulation();
     }
-    
+
+    #[allow(dead_code)]
     fn print_event(evt: Box<dyn Event>) {
         let evt = evt.into_any();
         if let Some(evt) = evt.downcast_ref::<NodeEvent>() {
@@ -248,19 +245,17 @@ mod tests {
         } else {
             panic!("Drone 2 channels not found");
         }
-        
-        std::thread::sleep(std::time::Duration::from_secs(2));
 
         stop_simulation((running_sim, drones, clients, servers, network, _event));
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn test_event_to_controller() {
         let config_path = "./config/simple_config.toml";
         let (running_sim, drones, clients, servers, network, event) = gen_simulation(config_path);
         let sender_client = &clients.get(&1).unwrap().1;
-        let sender_server = &servers.get(&4).unwrap().1;
-
+        let _sender_server = &servers.get(&4).unwrap().1;
 
         for _ in 0..2 {
             let evt = event.recv().unwrap();
@@ -309,7 +304,6 @@ mod tests {
             panic!("Not TextFileAdded, other event");
         }
 
-
         // test event from client
         let _result = sender_client.send(Box::new(WebCommand::GetTextFilesList));
         let event_3 = event.recv().unwrap();
@@ -339,7 +333,11 @@ mod tests {
 
         if let Ok(event_4) = event_4.downcast::<NodeEvent>() {
             // è giusto che panici, arriva FloodStarted
-            assert!(matches!(*event_4, NodeEvent::PacketSent { .. }), "Expected NodeEvent::PacketSent but got {:?}", *event_4);
+            assert!(
+                matches!(*event_4, NodeEvent::PacketSent { .. }),
+                "Expected NodeEvent::PacketSent but got {:?}",
+                *event_4
+            );
         } else {
             panic!("Not MessageSent, other event");
         }
@@ -349,7 +347,11 @@ mod tests {
 
         if let Ok(event_5) = event_5.downcast::<NodeEvent>() {
             // è giusto che panici, arriva FloodStarted
-            assert!(matches!(*event_5, NodeEvent::MessageSent { .. }), "Expected NodeEvent::MessageSent but got {:?}", *event_5);
+            assert!(
+                matches!(*event_5, NodeEvent::MessageSent { .. }),
+                "Expected NodeEvent::MessageSent but got {:?}",
+                *event_5
+            );
         } else {
             panic!("Not MessageSent, other event");
         }
@@ -359,7 +361,11 @@ mod tests {
 
         if let Ok(event_6) = event_6.downcast::<NodeEvent>() {
             // è giusto che panici, arriva FloodStarted
-            assert!(matches!(*event_6, NodeEvent::PacketSent { .. }), "Expected NodeEvent::PacketSent but got {:?}", *event_6);
+            assert!(
+                matches!(*event_6, NodeEvent::PacketSent { .. }),
+                "Expected NodeEvent::PacketSent but got {:?}",
+                *event_6
+            );
         } else {
             panic!("Not MessageSent, other event");
         }
@@ -412,9 +418,6 @@ mod tests {
             panic!("Not TextFileAdded, other event");
         }
 
-
-        stop_simulation((running_sim, drones, clients, servers, network, event))
-        
+        stop_simulation((running_sim, drones, clients, servers, network, event));
     }
-
 }

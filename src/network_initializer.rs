@@ -11,6 +11,7 @@ use common::types::{Command, Event, NodeCommand, NodeType as CommonNodeType};
 use crossbeam::channel::{Receiver, Sender};
 use server::{ChatServer, MediaServer, TextServer};
 use std::collections::HashMap;
+use std::sync::{Arc, Barrier};
 use std::thread::JoinHandle;
 use wg_internal::config::Config;
 use wg_internal::controller::{DroneCommand, DroneEvent};
@@ -37,7 +38,7 @@ pub struct NetworkInitializer<State = Uninitialized> {
     pub(crate) config: Config,
     // do not exists
     state: std::marker::PhantomData<State>,
-    
+
     network_view: Option<Network>,
 
     // these are needed to NetworkInitializer<Running> to run each node
@@ -96,20 +97,25 @@ impl NetworkInitializer<Uninitialized> {
                         neighbors.insert(*id, channel.get_sender());
                     }
                 }
-            
+
                 self.drone_command_channels
                     .insert(d.id, command_channel.get_sender());
-                self.initialized_drones.insert(d.id, generate_drone(i, &self.drone_event_channel.sender, (
+                self.initialized_drones.insert(
                     d.id,
-                    command_channel.get_receiver(),
-                    packet_receiver.get_receiver(),
-                    neighbors,
-                    d.pdr,
-                )));
+                    generate_drone(
+                        i,
+                        &self.drone_event_channel.sender,
+                        (
+                            d.id,
+                            command_channel.get_receiver(),
+                            packet_receiver.get_receiver(),
+                            neighbors,
+                            d.pdr,
+                        ),
+                    ),
+                );
             }
         }
-
-        
     }
 
     fn initialize_clients(&mut self) {
@@ -149,14 +155,13 @@ impl NetworkInitializer<Uninitialized> {
                 }
 
                 // save the channels
-                
+
                 self.node_command_channels
                     .insert(c.id, (node_type, command_channel.get_sender()));
 
                 // save the client
                 self.initialized_clients.insert(c.id, client);
-            } 
-            
+            }
         }
     }
 
@@ -207,7 +212,7 @@ impl NetworkInitializer<Uninitialized> {
                     }
                     _ => unreachable!(),
                 }
-                
+
                 self.node_command_channels
                     .insert(s.id, (node_type, command_channel.get_sender()));
                 self.initialized_servers.insert(s.id, server);
@@ -264,21 +269,24 @@ impl NetworkInitializer<Initialized> {
 
     #[must_use]
     pub fn start_simulation(mut self) -> NetworkInitializer<Running> {
-        for  (id, mut drone) in self.initialized_drones.drain(){
+        let barrier = Arc::new(Barrier::new(self.total_nodes - self.config.drone.len()));
+        for (id, mut drone) in self.initialized_drones.drain() {
             let handle = std::thread::spawn(move || {
                 drone.run();
             });
             self.node_handles.insert(id, handle);
         }
         for (id, mut client) in self.initialized_clients.drain() {
+            let barrier = barrier.clone();
             let handle = std::thread::spawn(move || {
-                client.run();
+                client.run(barrier);
             });
             self.node_handles.insert(id, handle);
         }
         for (id, mut server) in self.initialized_servers.drain() {
+            let barrier = barrier.clone();
             let handle = std::thread::spawn(move || {
-                server.run();
+                server.run(barrier);
             });
             self.node_handles.insert(id, handle);
         }
@@ -348,7 +356,7 @@ impl NetworkInitializer<Running> {
                 }
             }
         }
-        for (id,  channel) in self.drone_command_channels.drain() {
+        for (id, channel) in self.drone_command_channels.drain() {
             if let Some(packet_sender) = self.communications_channels.remove(&id) {
                 drop(packet_sender);
             }
