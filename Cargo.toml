@@ -5,10 +5,9 @@ edition = "2024"
 
 [dependencies]
 wg_internal = { git = "https://github.com/WGL-2024/WGL_repo_2024.git", features = ["debug"] }
-common = { path = "../common" }
-client = { path = "../client"}
-server = { path = "../server"}
-
+common = { git = "https://github.com/RustDoIt/common.git" }
+client = { git = "https://github.com/RustDoIt/client.git" }
+server = { git = "https://github.com/RustDoIt/server.git" }
 null-pointer-drone = { git = "https://github.com/The-Null-Pointer-Patrol/null-pointer-drone.git", branch = "main" }
 wg_2024-rust = { git = "https://github.com/LuigiMiazzo17/unitn-advancedProgramming-WGL_2024-drone.git"}
 d-r-o-n-e_drone = { git = "https://github.com/AP-2024-25-D-R-O-N-E/drone.git"}

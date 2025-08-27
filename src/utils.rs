@@ -9,6 +9,7 @@ use d_r_o_n_e_drone::MyDrone as DroneDrone;
 use dr_ones::Drone as DrOnesDrone;
 use lockheedrustin_drone::LockheedRustin;
 use null_pointer_drone::MyDrone as NullPointerDrone;
+use rust_do_it::RustDoIt;
 use rustafarian_drone::RustafarianDrone;
 use rustbusters_drone::RustBustersDrone;
 use rusteze_drone::RustezeDrone;
@@ -20,7 +21,6 @@ use wg_internal::controller::{DroneCommand, DroneEvent};
 use wg_internal::drone::Drone as DroneTrait;
 use wg_internal::network::NodeId;
 use wg_internal::packet::Packet;
-use rust_do_it::RustDoIt;
 
 type DroneAttributes = (
     NodeId,                          // id
@@ -89,25 +89,24 @@ macro_rules! drone_factories {
 
 drone_factories!(
     // CppEnjoyersDrone,
-    // RustDoIt, // --> termina
-    // DroneDrone,
+    RustDoIt, // --> termina
+    // DroneDrone, // panick
     // DrOnesDrone, // --> termina
-    // LockheedRustin,
-    // NullPointerDrone,
-    // RustafarianDrone,
-    RustBustersDrone, // --> termina
-    // RustezeDrone,
-    // RustyDrone,
-    // RustDrone,
+    // LockheedRustin, // --> termina
+    // NullPointerDrone, // panick
+    // RustafarianDrone, // panick
+    // RustBustersDrone, // --> termina
+    // RustezeDrone, //  --> non termina
+    // RustyDrone, // --> non termina
+    // RustDrone, // --> non termina
 );
 
 pub(crate) fn generate_drone(
-    i: usize, 
+    i: usize,
     controller_send: &Sender<DroneEvent>,
     drone_attributes: DroneAttributes,
-) -> Box<dyn DroneTrait>{
-    
-    let factory = FACTORIES[i % FACTORIES.len()]; 
+) -> Box<dyn DroneTrait> {
+    let factory = FACTORIES[i % FACTORIES.len()];
     factory(
         drone_attributes.0,
         controller_send.clone(),
@@ -158,10 +157,10 @@ mod tests {
         // let (send_event, _recv_event) = unbounded::<DroneEvent>();
         // let (send_cmd, recv_cmd) = unbounded::<DroneCommand>();
         // let (send_pkt, recv_pkt) = unbounded::<Packet>();
-        // 
+        //
         // let mut packet_map = HashMap::new();
         // // packet_map.insert(1, send_pkt);
-        // 
+        //
         // // Create 25 inputs to force cycling through FACTORIES several times
         // let inputs = (0..25)
         //     .map(|id| {
@@ -174,16 +173,16 @@ mod tests {
         //         )
         //     })
         //     .collect::<Vec<_>>();
-        // 
+        //
         // let drones = generate_drones(&send_event, inputs);
-        // 
+        //
         // // 1) Count must match
         // assert_eq!(drones.len(), 25);
-        // 
+        //
         // // 2) Check cycling: i-th drone corresponds to DroneType::iter().nth(i % FACTORIES.len())
         // for (i, _) in drones.iter().enumerate() {
         //     let expected_type = i % FACTORIES.len(); // NOT Correct
-        // 
+        //
         //     // This check only validates the index cycling
         //     // (we can't downcast Box<dyn DroneTrait> easily without extra work)
         //     assert_eq!(expected_type, i % FACTORIES.len());
