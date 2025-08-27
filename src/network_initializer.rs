@@ -363,7 +363,7 @@ impl NetworkInitializer<Running> {
             let _ = channel.send(DroneCommand::Crash);
             match self.node_handles.remove(&id) {
                 Some(handle) => match handle.join() {
-                    Ok(_) => {
+                    Ok(()) => {
                         println!("Terminated a drone thread successfully");
                     }
                     Err(e) => {

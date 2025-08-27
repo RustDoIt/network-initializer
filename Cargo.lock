@@ -242,15 +242,12 @@ dependencies = [
 [[package]]
 name = "client"
 version = "0.1.0"
+source = "git+https://github.com/RustDoIt/client.git#49306e68f92ea3cf5931ba28c8ff41e482f09984"
 dependencies = [
- "anyhow",
- "common 0.1.0",
+ "common 0.1.0 (git+https://github.com/RustDoIt/common.git)",
  "crossbeam",
  "crossbeam-channel",
- "log",
- "serde",
  "serde_json",
- "tokio",
  "uuid",
  "wg_internal",
 ]
@@ -274,19 +271,6 @@ dependencies = [
 [[package]]
 name = "common"
 version = "0.1.0"
-dependencies = [
- "anyhow",
- "crossbeam-channel",
- "serde",
- "tempfile",
- "tokio",
- "uuid",
- "wg_internal",
-]
-
-[[package]]
-name = "common"
-version = "0.1.0"
 source = "git+https://github.com/Cpp-enjoyers/common.git#18ac83d8245b9c14d467a50eea9d1332f4fe6821"
 dependencies = [
  "bincode 2.0.0",
@@ -295,6 +279,20 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "wg_2024",
+]
+
+[[package]]
+name = "common"
+version = "0.1.0"
+source = "git+https://github.com/RustDoIt/common.git#b9462615dc37203a145c6cfd8b66abde94ba0ad5"
+dependencies = [
+ "anyhow",
+ "crossbeam-channel",
+ "serde",
+ "tempfile",
+ "tokio",
+ "uuid",
+ "wg_internal",
 ]
 
 [[package]]
@@ -1099,7 +1097,7 @@ version = "0.1.0"
 dependencies = [
  "ap2024_unitn_cppenjoyers_drone",
  "client",
- "common 0.1.0",
+ "common 0.1.0 (git+https://github.com/RustDoIt/common.git)",
  "crossbeam",
  "d-r-o-n-e_drone",
  "dr_ones",
@@ -1586,9 +1584,10 @@ dependencies = [
 [[package]]
 name = "server"
 version = "0.1.0"
+source = "git+https://github.com/RustDoIt/server.git#f833c4613abede2d6d40dd4df995b8d11bf44c91"
 dependencies = [
  "bincode 1.3.3",
- "common 0.1.0",
+ "common 0.1.0 (git+https://github.com/RustDoIt/common.git)",
  "crossbeam",
  "log",
  "serde",

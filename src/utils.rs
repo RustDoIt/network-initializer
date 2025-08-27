@@ -88,8 +88,8 @@ macro_rules! drone_factories {
 }
 
 drone_factories!(
-    CppEnjoyersDrone,
-    // RustDoIt, // --> termina
+    // CppEnjoyersDrone,
+    RustDoIt, // --> termina
     // DroneDrone, // panick
     // DrOnesDrone, // --> termina
     // LockheedRustin, // --> termina
