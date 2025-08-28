@@ -88,17 +88,16 @@ macro_rules! drone_factories {
 }
 
 drone_factories!(
-    // CppEnjoyersDrone,
-    RustDoIt, // --> termina
+    CppEnjoyersDrone,
     // DroneDrone, // panick
-    // DrOnesDrone, // --> termina
-    // LockheedRustin, // --> termina
-    // NullPointerDrone, // panick
+    DrOnesDrone, // --> termina
+    // LockheedRustin, // --> panick
+    //NullPointerDrone, // panick
     // RustafarianDrone, // panick
-    // RustBustersDrone, // --> termina
-    // RustezeDrone, //  --> non termina
-    // RustyDrone, // --> non termina
-    // RustDrone, // --> non termina
+    RustBustersDrone, // --> termina
+    RustezeDrone, //  --> non termina
+    RustyDrone, // --> non termina
+    RustDrone, // --> non termina
 );
 
 pub(crate) fn generate_drone(

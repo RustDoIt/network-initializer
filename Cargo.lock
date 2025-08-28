@@ -242,7 +242,7 @@ dependencies = [
 [[package]]
 name = "client"
 version = "0.1.0"
-source = "git+https://github.com/RustDoIt/client.git#49306e68f92ea3cf5931ba28c8ff41e482f09984"
+source = "git+https://github.com/RustDoIt/client.git#48b165acf6bb8b79664742b4e6de24c1fb23fa95"
 dependencies = [
  "common 0.1.0 (git+https://github.com/RustDoIt/common.git)",
  "crossbeam",
@@ -284,13 +284,13 @@ dependencies = [
 [[package]]
 name = "common"
 version = "0.1.0"
-source = "git+https://github.com/RustDoIt/common.git#b9462615dc37203a145c6cfd8b66abde94ba0ad5"
+source = "git+https://github.com/RustDoIt/common.git#f7e97c309cd0e9c26e2bd1422cf5a1eca59020dc"
 dependencies = [
  "anyhow",
  "crossbeam-channel",
+ "rand 0.9.2",
  "serde",
  "tempfile",
- "tokio",
  "uuid",
  "wg_internal",
 ]
